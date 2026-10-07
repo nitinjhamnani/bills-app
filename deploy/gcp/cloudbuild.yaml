@@ -1,0 +1,13 @@
+# Cloud Build config so `--build-arg NEXT_PUBLIC_API_BASE_URL` actually reaches `docker build`
+# (a plain `gcloud builds submit --tag` does not pass build args through).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - NEXT_PUBLIC_API_BASE_URL=${_NEXT_PUBLIC_API_BASE_URL}
+      - -t
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}

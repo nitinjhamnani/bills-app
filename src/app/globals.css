@@ -1,26 +1,169 @@
 @import "tailwindcss";
 
+/* This app ships one theme: bright and light enterprise SaaS palette, always. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surface & Base */
+  --background: #f8fafc; /* crisp slate-50 canvas */
+  --foreground: #0f172a; /* high contrast slate-900 typography */
+  --surface: #ffffff; /* pure white surface */
+  --surface-muted: #f1f5f9; /* slate-100 headers */
+  --border-subtle: #cbd5e1; /* slate-300 crisp outlines */
+
+  /* Deep Indigo Royal Enterprise Brand Accents */
+  --accent: #4338ca; /* Indigo-700 Royal Accent */
+  --accent-hover: #3730a3;
+  --accent-soft: #eef2ff;
+
+  /* Domain Tones */
+  --success: #059669; /* Emerald Green */
+  --warning: #d97706; /* Amber Gold */
+  --danger: #e11d48; /* Crimson Rose */
+  --info: #0284c7; /* Sky Indigo */
+
+  /* Micro-Elevations & Glass Effects */
+  --shadow-card:
+    0 1px 3px 0 rgba(15, 23, 42, 0.06), 0 4px 14px -2px rgba(15, 23, 42, 0.04);
+  --shadow-elevated:
+    0 12px 28px -5px rgba(15, 23, 42, 0.1), 0 8px 12px -6px rgba(15, 23, 42, 0.05);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-subtle: var(--border-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
   background: var(--background);
+  background-image: 
+    radial-gradient(circle at 10% 10%, rgba(67, 56, 202, 0.03) 0%, transparent 40%),
+    radial-gradient(circle at 90% 90%, rgba(5, 150, 105, 0.03) 0%, transparent 40%);
+  background-attachment: fixed;
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-poppins), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Glassmorphism utility helpers */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.fintech-gradient-bg {
+  background: radial-gradient(circle at 0% 0%, rgba(67, 56, 202, 0.05) 0%, transparent 50%),
+              radial-gradient(circle at 100% 100%, rgba(5, 150, 105, 0.05) 0%, transparent 50%);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 transparent;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes api-loader {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(420%);
+  }
+}
+
+@keyframes support-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Stack table rows into labelled cards on phones. */
+@media (max-width: 767px) {
+  .data-table table,
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .data-table tr {
+    overflow: hidden;
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: var(--shadow-card);
+  }
+
+  .data-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    padding: 0.625rem 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .data-table td:last-child {
+    border-bottom: none;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    flex: 0 0 40%;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .data-table td[data-label=""]::before,
+  .data-table td[colspan]::before {
+    content: none;
+  }
+
+  .data-table td[colspan] {
+    display: block;
+    text-align: left;
+  }
+}
+
+
