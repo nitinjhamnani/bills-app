@@ -81,6 +81,7 @@ export function TicketConversation({
 
   useEffect(() => {
     stickToBottom.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load this ticket when it opens
     void loadMessages(false);
     const timer = window.setInterval(() => {
       void loadMessages(true);
@@ -91,6 +92,7 @@ export function TicketConversation({
 
   useEffect(() => {
     if (!refreshSignal) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- refresh was requested by the parent
     void loadMessages(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);

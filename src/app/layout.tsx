@@ -3,6 +3,7 @@ import { JetBrains_Mono, Poppins } from "next/font/google";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { GlobalLoader } from "@/components/ui/GlobalLoader";
 import { ToastProvider } from "@/components/ui/Toast";
+import { SITE_DESCRIPTION } from "@/lib/site";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -19,15 +20,34 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "PayOps Suite",
-    template: "%s · PayOps Suite",
+    default: "Paytrix | B2B Utility Bill Payments for Companies in India",
+    template: "%s | Paytrix",
   },
-  description:
-    "B2B bill payment workspace for organisations and their clients — fetch bills, fund wallets, and settle with billers.",
+  description: SITE_DESCRIPTION,
+  applicationName: "Paytrix",
+  keywords: [
+    "Paytrix",
+    "B2B bill payments",
+    "utility bill payments India",
+    "corporate utility payments",
+    "electricity bill payment for companies",
+  ],
+  openGraph: {
+    type: "website",
+    locale: "en_IN",
+    siteName: "Paytrix",
+    title: "Paytrix | B2B Utility Bill Payments for Companies in India",
+    description: SITE_DESCRIPTION,
+  },
+  twitter: {
+    card: "summary",
+    title: "Paytrix | B2B Utility Bill Payments for Companies in India",
+    description: SITE_DESCRIPTION,
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "B2B Fintech",
+    title: "Paytrix",
   },
 };
 

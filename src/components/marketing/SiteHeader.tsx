@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
@@ -8,8 +8,9 @@ import { cn } from "@/lib/cn";
 
 const NAV = [
   { href: "/", label: "Home" },
-  { href: "/about", label: "About" },
   { href: "/services", label: "Services" },
+  { href: "/about", label: "About" },
+  { href: "/contact", label: "Contact" },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -19,25 +20,17 @@ function isActive(pathname: string, href: string) {
 
 export function SiteHeader() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+  const [openPath, setOpenPath] = useState<string | null>(null);
+  const open = openPath === pathname;
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
       <div className="mx-auto grid h-16 max-w-6xl grid-cols-[1fr_auto] items-center gap-4 px-4 sm:px-6 md:grid-cols-[1fr_auto_1fr]">
         <Link href="/" className="flex min-w-0 items-center gap-2.5 justify-self-start">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-700 to-indigo-500 text-[11px] font-black tracking-wider text-white shadow-sm">
-            B2B
+            Px
           </span>
-          <span className="flex min-w-0 flex-col">
-            <span className="truncate text-sm font-bold tracking-tight text-slate-900">PayOps Suite</span>
-            <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:block">
-              Enterprise bill payments
-            </span>
-          </span>
+          <span className="truncate text-sm font-bold tracking-tight text-slate-900">Paytrix</span>
         </Link>
 
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
@@ -68,7 +61,7 @@ export function SiteHeader() {
             type="button"
             className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 md:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => setOpenPath((current) => (current === pathname ? null : pathname))}
           >
             {open ? <X size={18} /> : <Menu size={18} />}
           </button>

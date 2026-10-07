@@ -42,7 +42,7 @@ export function LoginForm() {
   return (
     <>
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Workspace access</p>
-      <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Sign in</h1>
+      <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">Sign in</h2>
       <p className="mt-1.5 text-sm text-slate-500">
         Use the phone number or email on your account. There is no public self-signup.
       </p>

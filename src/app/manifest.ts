@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "B2B Fintech Platform",
-    short_name: "B2B Fintech",
+    name: "Paytrix",
+    short_name: "Paytrix",
     description:
-      "Bill payment platform for platform admins, organisations and clients",
+      "B2B utility bill payments for organisations and companies in India",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

@@ -1,0 +1,24 @@
+# DigitalOcean App Platform spec.
+# Create:  doctl apps create --spec .do/app.yaml
+# Update:  doctl apps update <app-id> --spec .do/app.yaml
+#
+# Before the first create, connect GitHub in the App Platform dashboard so
+# DigitalOcean can clone this repo.
+#
+# When the API is ready, add NEXT_PUBLIC_API_BASE_URL (for example
+# https://api.example.com) with scope RUN_AND_BUILD_TIME, then redeploy.
+# Omitting it ships the marketing site without a working login form.
+name: paytrix
+region: blr
+services:
+  - name: web
+    github:
+      repo: nitinjhamnani/bills-app
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /

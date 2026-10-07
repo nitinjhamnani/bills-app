@@ -91,11 +91,11 @@ export function AppShell({
             {!collapsed && (
               <div className="flex items-center gap-2.5 overflow-hidden">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-xs font-black tracking-wider text-white shadow-sm">
-                  B2B
+                  Px
                 </span>
                 <div className="flex flex-col">
                   <span className="truncate text-sm font-bold tracking-tight text-slate-900 leading-tight">
-                    PayOps Suite
+                    Paytrix
                   </span>
                   <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                     Enterprise
@@ -105,7 +105,7 @@ export function AppShell({
             )}
             {collapsed && (
               <span className="mx-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-xs font-black tracking-wider text-white shadow-sm">
-                B2B
+                Px
               </span>
             )}
             <button
