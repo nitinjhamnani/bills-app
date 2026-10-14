@@ -54,6 +54,7 @@ export function CreateBillModal({
   const [parametersLoading, setParametersLoading] = useState(false);
   const [parameterError, setParameterError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [customerName, setCustomerName] = useState("");
   const [mobile, setMobile] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -68,6 +69,7 @@ export function CreateBillModal({
     setParameters([]);
     setParameterError(null);
     setValues({});
+    setCustomerName("");
     setMobile("");
     let cancelled = false;
     setOptionsLoading(true);
@@ -105,6 +107,7 @@ export function CreateBillModal({
     parameterError == null &&
     parameters.length > 0 &&
     parameters.every((parameter) => (values[parameter.name] ?? "").trim().length > 0) &&
+    /^[A-Za-z]+$/.test(customerName) &&
     /^\d{10}$/.test(mobile);
 
   async function continueToBillers() {
@@ -158,6 +161,7 @@ export function CreateBillModal({
           locationId,
           billerId,
           parameters: values,
+          customerName,
           customerMobileNumber: mobile,
         },
       });
@@ -296,6 +300,14 @@ export function CreateBillModal({
                   onChange={(e) => setValues((current) => ({ ...current, [parameter.name]: e.target.value }))}
                 />
               ))}
+              <Field
+                label="Customer name"
+                required
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value.replace(/[^A-Za-z]/g, ""))}
+                placeholder="Letters only"
+                hint="Sent to the biller as the sender name. Letters only, no spaces."
+              />
               <Field
                 label="Customer mobile number"
                 required
