@@ -9,7 +9,7 @@ export default function ClientReportsLayout({ children }: { children: React.Reac
 
   useEffect(() => {
     if (getUser()?.role === "CLIENT_OPERATOR") {
-      router.replace("/client");
+      router.replace("/client/dashboard");
     }
   }, [router]);
 

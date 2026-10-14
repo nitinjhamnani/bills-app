@@ -189,22 +189,6 @@ export default function ClientsPage() {
     setCreatedClient(null);
   }
 
-  async function toggleStatus(client: Client) {
-    const next = client.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE";
-    try {
-      await apiFetch(`/api/v1/organisation/clients/${client.id}/status`, {
-        method: "PATCH",
-        body: { status: next },
-      });
-      toast.success(
-        `${client.clientName} ${next === "ACTIVE" ? "reactivated" : "suspended"}`,
-      );
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Action failed");
-    }
-  }
-
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
@@ -354,21 +338,7 @@ export default function ClientsPage() {
                     </TD>
                     <TD className="text-slate-500">{formatOnboarded(client.createdAt)}</TD>
                     <TD>
-                      <div className="flex items-center justify-end gap-2">
-                        {client.status !== "TERMINATED" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleStatus(client);
-                            }}
-                          >
-                            {client.status === "ACTIVE" ? "Suspend" : "Reactivate"}
-                          </Button>
-                        )}
-                        <ChevronRight size={16} className="text-slate-300" />
-                      </div>
+                      <ChevronRight size={16} className="ml-auto text-slate-300" />
                     </TD>
                   </TR>
                 ))}

@@ -135,7 +135,7 @@ export default function PlatformOrganisationDetailPage() {
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
       <div className="shrink-0 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
         <Link
-          href="/platform"
+          href="/platform/organisations"
           className="mb-3 inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800"
         >
           <ArrowLeft size={14} /> Organisations

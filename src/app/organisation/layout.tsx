@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Building2,
@@ -15,11 +16,12 @@ import {
 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
+import { apiFetch } from "@/lib/api-client";
 import { useSupportUnreadCount } from "@/lib/support-unread";
-import type { UserProfile } from "@/lib/types";
+import type { OrganisationMe, UserProfile } from "@/lib/types";
 
 const NAV: NavLink[] = [
-  { href: "/organisation", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/organisation/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/organisation/clients", label: "Clients", icon: Building2 },
   { href: "/organisation/users", label: "Users", icon: Users },
   { href: "/organisation/managed-bills", label: "Managed Bills", icon: FileText },
@@ -40,11 +42,19 @@ function OrganisationShell({
   children: React.ReactNode;
 }) {
   const unread = useSupportUnreadCount("/api/v1/organisation/support-tickets/unread-summary");
+  const [organisationName, setOrganisationName] = useState<string | null>(null);
   const nav = NAV.map((item) =>
     item.href === "/organisation/support-tickets" ? { ...item, badge: unread } : item,
   );
+
+  useEffect(() => {
+    apiFetch<OrganisationMe>("/api/v1/organisation/me")
+      .then((me) => setOrganisationName(me.organisationName))
+      .catch(() => setOrganisationName(null));
+  }, []);
+
   return (
-    <AppShell user={user} moduleLabel="Organisation" nav={nav}>
+    <AppShell user={user} moduleLabel={organisationName ?? ""} nav={nav}>
       {children}
     </AppShell>
   );

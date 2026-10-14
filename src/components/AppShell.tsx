@@ -24,9 +24,7 @@ export interface NavLink {
 const SIDEBAR_COLLAPSED_KEY = "b2bfintech.sidebarCollapsed";
 
 function isNavActive(pathname: string, href: string) {
-  if (href === "/organisation" || href === "/client" || href === "/platform") {
-    return pathname === href;
-  }
+  if (href.endsWith("/dashboard")) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -193,11 +191,11 @@ export function AppShell({
                 <Menu size={20} />
               </button>
             )}
-            <div className="flex items-center gap-2">
-              <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-700/10">
+            {moduleLabel ? (
+              <span className="max-w-[16rem] truncate rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-700/10 sm:max-w-xs">
                 {moduleLabel}
               </span>
-            </div>
+            ) : null}
           </div>
 
           <UserMenu user={user} pathname={pathname} />

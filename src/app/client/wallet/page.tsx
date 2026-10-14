@@ -143,7 +143,7 @@ export default function ClientWalletPage() {
 
   useEffect(() => {
     if (user?.role === "CLIENT_OPERATOR") {
-      router.replace("/client");
+      router.replace("/client/dashboard");
     }
   }, [router, user?.role]);
 

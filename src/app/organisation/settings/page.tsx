@@ -2,17 +2,16 @@
 
 import { useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Percent, Receipt, ShieldCheck } from "lucide-react";
+import { MapPin, Receipt, ShieldCheck } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/cn";
-import { BillServicesTab } from "./BillServicesTab";
 import { ApprovalRulesTab } from "./ApprovalRulesTab";
-import { FeeConfigTab } from "./FeeConfigTab";
+import { EnablementTab } from "./EnablementTab";
 
 const TABS = [
-  { key: "bill-services", label: "Bill services", icon: Receipt },
+  { key: "categories", label: "Categories", icon: Receipt },
+  { key: "locations", label: "Locations", icon: MapPin },
   { key: "approval-rules", label: "Approval rules", icon: ShieldCheck },
-  { key: "fees", label: "Fees", icon: Percent },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -24,29 +23,29 @@ export default function OrganisationSettingsPage() {
   const requestedTab = searchParams.get("tab");
   const initialTab = TAB_KEYS.includes(requestedTab ?? "")
     ? (requestedTab as TabKey)
-    : "bill-services";
+    : "categories";
 
   const [tab, setTab] = useState<TabKey>(initialTab);
-  const [counts, setCounts] = useState({ services: 0, rules: 0, fees: 0 });
+  const [counts, setCounts] = useState({ categories: 0, locations: 0, rules: 0 });
 
-  const setServiceCount = useCallback((services: number) => {
-    setCounts((current) => (current.services === services ? current : { ...current, services }));
+  const setCategoryCount = useCallback((categories: number) => {
+    setCounts((current) => (current.categories === categories ? current : { ...current, categories }));
+  }, []);
+  const setLocationCount = useCallback((locations: number) => {
+    setCounts((current) => (current.locations === locations ? current : { ...current, locations }));
   }, []);
   const setRuleCount = useCallback((rules: number) => {
     setCounts((current) => (current.rules === rules ? current : { ...current, rules }));
   }, []);
-  const setFeeCount = useCallback((fees: number) => {
-    setCounts((current) => (current.fees === fees ? current : { ...current, fees }));
-  }, []);
 
   const countFor = (key: TabKey) =>
-    key === "bill-services" ? counts.services : key === "approval-rules" ? counts.rules : counts.fees;
+    key === "categories" ? counts.categories : key === "locations" ? counts.locations : counts.rules;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Organisation settings"
-        description="Which bill services clients can use, when a top-up needs a checker, and the convenience fee on a bill."
+        description="Which categories and locations this organisation can use, and when a top-up needs a checker."
       />
 
       <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
@@ -78,14 +77,14 @@ export default function OrganisationSettingsPage() {
         })}
       </div>
 
-      <div className={tab === "bill-services" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-        <BillServicesTab onCount={setServiceCount} />
+      <div className={tab === "categories" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <EnablementTab kind="categories" onCount={setCategoryCount} />
+      </div>
+      <div className={tab === "locations" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+        <EnablementTab kind="locations" onCount={setLocationCount} />
       </div>
       <div className={tab === "approval-rules" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
         <ApprovalRulesTab onCount={setRuleCount} />
-      </div>
-      <div className={tab === "fees" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-        <FeeConfigTab onCount={setFeeCount} />
       </div>
     </div>
   );

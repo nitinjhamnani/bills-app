@@ -12,13 +12,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Field, SelectField } from "@/components/ui/Field";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
-import type { Biller, BulkRowResult, ClientBillServiceConfig, ManagedBill } from "@/lib/types";
+import type { BulkRowResult, ManagedBill } from "@/lib/types";
 import { API_BASE_URL } from "@/lib/workspace";
+import { CreateBillModal } from "./CreateBillModal";
 
 const CATEGORY_LABELS: Record<string, string> = {
   ELECTRICITY: "Electricity",
@@ -40,13 +40,6 @@ const FILTERS = [
 ] as const;
 
 type BillFilter = (typeof FILTERS)[number]["key"];
-
-const EMPTY_FORM = {
-  billServiceCode: "",
-  billerId: "",
-  customerBillAccountNumber: "",
-  customerMobileNumber: "",
-};
 
 const searchClass =
   "min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20";
@@ -90,11 +83,6 @@ export default function ManagedBillsPage() {
   const [search, setSearch] = useState("");
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [categories, setCategories] = useState<ClientBillServiceConfig[]>([]);
-  const [billers, setBillers] = useState<Biller[]>([]);
-  const [billersLoading, setBillersLoading] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [creating, setCreating] = useState(false);
 
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<BulkRowResult[] | null>(null);
@@ -102,14 +90,14 @@ export default function ManagedBillsPage() {
   const [templateDownloading, setTemplateDownloading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       setBills(await apiFetch<ManagedBill[]>(`/api/v1/clients/${clientId}/managed-bills`));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load managed bills");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -118,65 +106,11 @@ export default function ManagedBillsPage() {
     load();
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!form.billServiceCode) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setBillers([]);
-      return () => {
-        cancelled = true;
-      };
-    }
-    setBillersLoading(true);
-    apiFetch<Biller[]>(`/api/v1/billers?category=${form.billServiceCode}`)
-      .then((data) => {
-        if (!cancelled) setBillers(data);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          toast.error(err instanceof ApiError ? err.message : "Failed to load billers");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setBillersLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [form.billServiceCode]);
-
-  async function openModal() {
-    setModalOpen(true);
-    setForm(EMPTY_FORM);
-    if (categories.length > 0) return;
-    try {
-      const configs = await apiFetch<ClientBillServiceConfig[]>(
-        `/api/v1/organisation/clients/${clientId}/bill-services`,
-      );
-      setCategories(configs.filter((config) => config.enabled));
-    } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "Failed to load enabled bill services",
-      );
-    }
-  }
-
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    setCreating(true);
-    try {
-      await apiFetch(`/api/v1/clients/${clientId}/managed-bills`, {
-        method: "POST",
-        body: form,
-      });
-      toast.success("Bill created — fetching the latest details now");
-      setModalOpen(false);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to create bill");
-    } finally {
-      setCreating(false);
-    }
+  function billCreated() {
+    setModalOpen(false);
+    load(true);
+    window.setTimeout(() => load(true), 3000);
+    window.setTimeout(() => load(true), 8000);
   }
 
   async function downloadTemplate() {
@@ -263,12 +197,6 @@ export default function ManagedBillsPage() {
   };
   const visible = searched.filter((bill) => filter === "ALL" || bucket(bill) === filter);
 
-  const canCreate =
-    form.billServiceCode &&
-    form.billerId &&
-    form.customerBillAccountNumber.trim().length > 0 &&
-    /^\d{10}$/.test(form.customerMobileNumber);
-
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
@@ -286,7 +214,7 @@ export default function ManagedBillsPage() {
             >
               Bulk upload
             </Button>
-            <Button icon={<Plus size={16} />} onClick={openModal}>
+            <Button icon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
               Create bill
             </Button>
           </>
@@ -353,7 +281,7 @@ export default function ManagedBillsPage() {
             }
             action={
               bills.length === 0 ? (
-                <Button icon={<Plus size={16} />} onClick={openModal}>
+                <Button icon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
                   Create bill
                 </Button>
               ) : undefined
@@ -419,73 +347,12 @@ export default function ManagedBillsPage() {
         )}
       </ListCard>
 
-      <Modal
+      <CreateBillModal
         open={modalOpen}
+        clientId={clientId}
         onClose={() => setModalOpen(false)}
-        title="Create a managed bill"
-        description="Created and fetched from the biller right away. Auto-fetch keeps the next cycle up to date."
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button form="create-managed-bill-form" type="submit" loading={creating} disabled={!canCreate}>
-              Create bill
-            </Button>
-          </>
-        }
-      >
-        <form id="create-managed-bill-form" onSubmit={create} className="flex flex-col gap-4">
-          <SelectField
-            label="Category"
-            required
-            value={form.billServiceCode}
-            onChange={(e) => setForm({ ...form, billServiceCode: e.target.value, billerId: "" })}
-          >
-            <option value="">Select a category...</option>
-            {categories.map((category) => (
-              <option key={category.billServiceCode} value={category.billServiceCode}>
-                {CATEGORY_LABELS[category.billServiceCode] ?? category.billServiceCode}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField
-            label="Biller"
-            required
-            disabled={!form.billServiceCode || billersLoading}
-            value={form.billerId}
-            onChange={(e) => setForm({ ...form, billerId: e.target.value })}
-            hint={billersLoading ? "Loading billers..." : undefined}
-          >
-            <option value="">
-              {form.billServiceCode ? "Select a biller..." : "Choose a category first"}
-            </option>
-            {billers.map((biller) => (
-              <option key={biller.billerId} value={biller.billerId}>
-                {biller.billerName}
-                {biller.state ? ` (${biller.state})` : ""}
-              </option>
-            ))}
-          </SelectField>
-          <Field
-            label="Consumer number"
-            required
-            value={form.customerBillAccountNumber}
-            onChange={(e) => setForm({ ...form, customerBillAccountNumber: e.target.value })}
-            placeholder="e.g. 100234567"
-          />
-          <Field
-            label="Customer mobile number"
-            required
-            value={form.customerMobileNumber}
-            onChange={(e) =>
-              setForm({ ...form, customerMobileNumber: e.target.value.replace(/\D/g, "") })
-            }
-            placeholder="10-digit mobile number"
-            maxLength={10}
-          />
-        </form>
-      </Modal>
+        onCreated={billCreated}
+      />
 
       <Modal
         open={bulkModalOpen}

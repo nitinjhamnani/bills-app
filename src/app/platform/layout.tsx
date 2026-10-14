@@ -1,11 +1,12 @@
 "use client";
 
-import { LayoutDashboard, History, BarChart3 } from "lucide-react";
+import { LayoutDashboard, History, BarChart3, Building2 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
 
 const NAV: NavLink[] = [
-  { href: "/platform", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/platform/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/platform/organisations", label: "Organisations", icon: Building2 },
   { href: "/platform/reports", label: "Reports", icon: BarChart3 },
   { href: "/platform/audit-log", label: "Audit log", icon: History },
 ];

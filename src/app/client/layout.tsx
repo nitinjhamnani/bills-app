@@ -16,7 +16,7 @@ import { useSupportUnreadCount } from "@/lib/support-unread";
 import type { Role, UserProfile } from "@/lib/types";
 
 const NAV: Array<NavLink & { roles?: Role[] }> = [
-  { href: "/client", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/client/wallet", label: "Wallet", icon: Wallet, roles: ["CLIENT_ADMIN"] },
   { href: "/client/managed-bills", label: "Managed Bills", icon: FileText },
   { href: "/client/my-payments", label: "My Payments", icon: Send },

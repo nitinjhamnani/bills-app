@@ -13,7 +13,7 @@ export default function ClientUsersPage() {
 
   useEffect(() => {
     if (user?.role !== "CLIENT_ADMIN") {
-      router.replace("/client");
+      router.replace("/client/dashboard");
     }
   }, [router, user?.role]);
 

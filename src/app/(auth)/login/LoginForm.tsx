@@ -25,7 +25,7 @@ export function LoginForm() {
         auth: false,
       });
       saveSession(login);
-      router.replace(`/${moduleForRole(login.user.role)}`);
+      router.replace(`/${moduleForRole(login.user.role)}/dashboard`);
     } catch (err) {
       setError(
         err instanceof ApiError

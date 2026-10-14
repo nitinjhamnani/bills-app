@@ -1,4 +1,4 @@
-import { getToken } from "./auth";
+import { clearSession, getToken } from "./auth";
 import { API_BASE_URL } from "./workspace";
 
 export class ApiError extends Error {
@@ -48,6 +48,17 @@ function endRequest() {
   setInflight(inflight - 1);
 }
 
+let redirectingToLogin = false;
+
+/** A 403 means the session is no longer accepted. Clear it and leave the signed-in app. */
+function logoutOnForbidden(status: number) {
+  if (status !== 403 || typeof window === "undefined" || redirectingToLogin) return;
+  if (window.location.pathname === "/login") return;
+  redirectingToLogin = true;
+  clearSession();
+  window.location.replace("/login");
+}
+
 /** Marks a raw upload/download as in flight so the global loader covers calls that cannot use {@link apiFetch}. */
 export async function trackedFetch(
   input: string,
@@ -55,7 +66,9 @@ export async function trackedFetch(
 ): Promise<Response> {
   beginRequest();
   try {
-    return await fetch(input, init);
+    const response = await fetch(input, init);
+    if (response.status === 403 && getToken()) logoutOnForbidden(response.status);
+    return response;
   } finally {
     endRequest();
   }
@@ -98,6 +111,7 @@ export async function apiFetch<T>(
       } catch {
         // response body wasn't JSON - fall back to the generic message above
       }
+      if (auth) logoutOnForbidden(response.status);
       throw new ApiError(message, response.status, errorCode);
     }
 
