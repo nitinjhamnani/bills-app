@@ -12,6 +12,8 @@ export function Modal({
   children,
   footer,
   dismissable = true,
+  size = "md",
+  raised = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +23,9 @@ export function Modal({
   footer?: React.ReactNode;
   /** Set to false for dialogs the user must act on explicitly - hides the X, and ignores backdrop clicks and Escape. */
   dismissable?: boolean;
+  size?: "md" | "xl";
+  /** Sits above another open modal. */
+  raised?: boolean;
 }) {
   useEffect(() => {
     if (!open || !dismissable) return;
@@ -43,7 +48,7 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-4">
+    <div className={cn("fixed inset-0 z-50 flex items-end justify-center md:items-center md:p-4", raised && "z-[60]")}>
       <button
         aria-label="Close"
         onClick={dismissable ? onClose : undefined}
@@ -56,7 +61,10 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl md:max-h-[85dvh] md:max-w-lg md:rounded-2xl"
+        className={cn(
+          "relative flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-slate-200 bg-white shadow-2xl md:max-h-[85dvh] md:rounded-2xl",
+          size === "xl" ? "md:max-w-4xl" : "md:max-w-lg",
+        )}
       >
         <div className="flex items-start justify-between gap-4 px-5 pt-5 md:px-6">
           <div className="min-w-0">

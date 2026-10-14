@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ProofModal } from "@/components/ProofModal";
 import { Field, SelectField } from "@/components/ui/Field";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -164,6 +165,7 @@ export default function ClientWalletPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [proof, setProof] = useState<File | null>(null);
+  const [proofId, setProofId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function load() {
@@ -193,19 +195,6 @@ export default function ClientWalletPage() {
     setModalOpen(false);
     setForm(EMPTY_FORM);
     setProof(null);
-  }
-
-  async function viewProof(documentId: string) {
-    try {
-      const res = await trackedFetch(`${API_BASE_URL}/api/v1/documents/${documentId}/file`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      window.open(URL.createObjectURL(blob), "_blank");
-    } catch {
-      toast.error("Could not open the payment proof");
-    }
   }
 
   async function handleTopUp(e: React.FormEvent) {
@@ -578,7 +567,7 @@ export default function ClientWalletPage() {
         description="The wallet is credited only after the organisation accepts this request."
         footer={
           selectedRequest?.documentId ? (
-            <Button onClick={() => viewProof(selectedRequest.documentId as string)}>
+            <Button onClick={() => setProofId(selectedRequest.documentId as string)}>
               View proof
             </Button>
           ) : undefined
@@ -674,6 +663,8 @@ export default function ClientWalletPage() {
           )}
         </form>
       </Modal>
+
+      <ProofModal documentId={proofId} onClose={() => setProofId(null)} />
     </div>
   );
 }

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, FileText, PackageCheck, Wallet } from "lucide-react";
-import { apiFetch, ApiError, trackedFetch } from "@/lib/api-client";
-import { getToken } from "@/lib/auth";
+import { apiFetch, ApiError } from "@/lib/api-client";
+import { ProofModal } from "@/components/ProofModal";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +14,6 @@ import { StatCardSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import type { ClientAnalytics, WalletTopup } from "@/lib/types";
-import { API_BASE_URL } from "@/lib/workspace";
 
 export function OverviewTab({ clientId }: { clientId: string }) {
   const toast = useToast();
@@ -24,6 +23,7 @@ export function OverviewTab({ clientId }: { clientId: string }) {
   const [topups, setTopups] = useState<WalletTopup[]>([]);
   const [topupsLoading, setTopupsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [proofId, setProofId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,20 +89,6 @@ export function OverviewTab({ clientId }: { clientId: string }) {
       toast.error(err instanceof ApiError ? err.message : "Action failed");
     } finally {
       setBusyId(null);
-    }
-  }
-
-  async function viewProof(documentId: string) {
-    try {
-      const res = await trackedFetch(
-        `${API_BASE_URL}/api/v1/documents/${documentId}/file`,
-        { headers: { Authorization: `Bearer ${getToken()}` } },
-      );
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      window.open(URL.createObjectURL(blob), "_blank");
-    } catch {
-      toast.error("Could not open the payment proof");
     }
   }
 
@@ -179,7 +165,7 @@ export function OverviewTab({ clientId }: { clientId: string }) {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => viewProof(t.documentId as string)}
+                          onClick={() => setProofId(t.documentId as string)}
                         >
                           View proof
                         </Button>
@@ -223,6 +209,7 @@ export function OverviewTab({ clientId }: { clientId: string }) {
           </Table>
         )}
       </Card>
+      <ProofModal documentId={proofId} onClose={() => setProofId(null)} />
     </div>
   );
 }

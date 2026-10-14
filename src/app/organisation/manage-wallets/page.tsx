@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Inbox, PlusCircle, Search, Wallet as WalletIcon } from "lucide-react";
-import { apiFetch, ApiError, trackedFetch } from "@/lib/api-client";
-import { getToken } from "@/lib/auth";
+import { apiFetch, ApiError } from "@/lib/api-client";
+import { ProofModal } from "@/components/ProofModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +16,6 @@ import { useToast } from "@/components/ui/Toast";
 import { userInitials } from "@/components/UserMenu";
 import { cn } from "@/lib/cn";
 import type { ClientWallet, LedgerEntryDto, PendingWalletTopup } from "@/lib/types";
-import { API_BASE_URL } from "@/lib/workspace";
 
 const TABS = [
   { key: "topups", label: "Top-up requests", icon: Inbox },
@@ -85,6 +84,7 @@ export default function ManageWalletsPage() {
   const [addAmount, setAddAmount] = useState("");
   const [addNote, setAddNote] = useState("");
   const [addingFunds, setAddingFunds] = useState(false);
+  const [proofId, setProofId] = useState<string | null>(null);
 
   async function loadPending() {
     setPendingLoading(true);
@@ -131,19 +131,6 @@ export default function ManageWalletsPage() {
     setLedgerFilter("ALL");
     setLedgerSearch("");
     loadLedger(wallet.clientId);
-  }
-
-  async function viewProof(documentId: string) {
-    try {
-      const res = await trackedFetch(`${API_BASE_URL}/api/v1/documents/${documentId}/file`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      });
-      if (!res.ok) throw new Error();
-      const blob = await res.blob();
-      window.open(URL.createObjectURL(blob), "_blank");
-    } catch {
-      toast.error("Could not open the payment proof");
-    }
   }
 
   async function reviewTopup(id: string, approve: boolean) {
@@ -345,7 +332,7 @@ export default function ManageWalletsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => viewProof(item.documentId as string)}
+                            onClick={() => setProofId(item.documentId as string)}
                           >
                             View proof
                           </Button>
@@ -652,6 +639,7 @@ export default function ManageWalletsPage() {
           </form>
         )}
       </Modal>
+      <ProofModal documentId={proofId} onClose={() => setProofId(null)} />
     </div>
   );
 }

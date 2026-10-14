@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { saveSession } from "@/lib/auth";
 import { moduleForRole, type LoginResponse } from "@/lib/types";
@@ -11,6 +11,7 @@ export function LoginForm() {
   const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -62,14 +63,24 @@ export function LoginForm() {
         </label>
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="font-medium text-slate-700">Password</span>
-          <input
-            type="password"
-            required
-            placeholder="Your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className={inputClasses}
-          />
+          <span className="relative">
+            <input
+              type={showPassword ? "text" : "password"}
+              required
+              placeholder="Your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={`${inputClasses} pr-11`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((visible) => !visible)}
+              className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </span>
         </label>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button
