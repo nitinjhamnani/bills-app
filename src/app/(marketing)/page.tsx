@@ -113,7 +113,7 @@ const STEPS = [
   {
     step: "04",
     title: "Settle with the biller",
-    body: "Organisation teams pick up the paid cycle, settle with the utility, and record the outcome. The audit log keeps who did what, and when.",
+    body: "Paytrix picks up the paid cycle, settles with the utility, and records the outcome. The audit log keeps who did what, and when.",
   },
 ];
 
@@ -128,11 +128,11 @@ const FAQS = [
   },
   {
     q: "How does a company pay a bill?",
-    a: "The client funds a prepaid wallet. When a fetch finds an amount due, the client pays from that balance. The organisation then settles with the biller. Already-paid fetches update the account without creating a payment.",
+    a: "The client funds a prepaid wallet. When a fetch finds an amount due, the client pays from that balance. Paytrix then settles with the biller. Already-paid fetches update the account without creating a payment.",
   },
   {
     q: "Can anyone sign up?",
-    a: "No. Workspace access is by invitation. Authorised organisations receive logins from Paytrix, and they issue access to their own client companies.",
+    a: "No. Workspace access is by invitation. Paytrix issues logins to its staff and to client companies.",
   },
 ];
 
@@ -309,7 +309,7 @@ export default function HomePage() {
           <ul className="grid gap-4 sm:grid-cols-2">
             {[
               { title: "Prepaid, not overdraft", body: "A bill is paid only from a funded wallet. There is a ledger line for every credit and debit." },
-              { title: "Roles stay separate", body: "Platform, organisation, and client users never share a workspace or each other’s bills." },
+              { title: "Roles stay separate", body: "Paytrix staff and client users never share a workspace or each other’s bills." },
               { title: "A second person, when you need one", body: "Approval rules can require a checker before settlement goes through." },
               { title: "An audit trail", body: "Fetches, wallet payments, pick-ups, and biller settlements are timestamped." },
             ].map((item) => (

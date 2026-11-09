@@ -29,7 +29,7 @@ const SECTIONS = [
     title: "2. Information we collect",
     body: [
       "If you call or email us, we receive the details you choose to send: your name, phone number, email address, organisation, and what you tell us about the utilities you pay.",
-      "When an organisation is onboarded, the workspace holds account information for its users and client companies: name, phone number, email address where one is provided, role, and the organisation or client company the person belongs to.",
+      "When an organisation is onboarded, the workspace holds account information for its users and client companies: name, phone number, email address where one is provided, role, and Paytrix or client company the person belongs to.",
       "Bill work creates operational records: consumer numbers, fetched bills and due amounts, wallet top-ups and balances, payments, settlements with billers, support tickets, disputes, and an audit log of who did what and when.",
       "Sign-in uses a phone number or email and a password. The password is sent to the Paytrix service to check it. The browser then stores an access token and a copy of the user profile so later requests can be authorised. A sidebar preference may also be stored on the device. Paytrix does not use a separate advertising or analytics tracker on this site.",
     ],
@@ -44,7 +44,7 @@ const SECTIONS = [
   {
     title: "4. Who can see it",
     body: [
-      "A user sees the records their role allows. Client company users see their own accounts, wallet, and payments. Organisation users see the clients, bills, wallets, and settlements of that organisation. Platform operators see what is required to provision organisations and oversee the network. One tenant does not see another tenant’s book.",
+      "A user sees the records their role allows. Client company users see their own accounts, wallet, and payments. Paytrix staff see the clients, bills, wallets, and settlements on the book.",
       "Bill and payment details are shared with the biller or bill-fetch service as needed to retrieve a bill or record a settlement. We do not sell personal information.",
       "People who host or support the service may process this information only so Paytrix can run. We may also disclose information if the law requires it.",
     ],
@@ -59,7 +59,7 @@ const SECTIONS = [
   {
     title: "6. How long we keep it",
     body: [
-      "Account and bill records are kept while the organisation uses Paytrix, and afterwards for as long as needed to complete open settlements, answer disputes, support the audit log, and meet legal record-keeping duties. Enquiry emails and call notes are kept while the conversation is active and for a reasonable period after it closes.",
+      "Account and bill records are kept while the workspace is in use, and afterwards for as long as needed to complete open settlements, answer disputes, support the audit log, and meet legal record-keeping duties. Enquiry emails and call notes are kept while the conversation is active and for a reasonable period after it closes.",
     ],
   },
   {
@@ -71,8 +71,8 @@ const SECTIONS = [
   {
     title: "8. Your requests",
     body: [
-      "You may ask what account information Paytrix holds about you, ask for a correction, or ask us to close an account that is no longer authorised. If you are a client-company user, start with your organisation administrator, because that organisation issued the login and operates the book your data sits on.",
-      "Where the Digital Personal Data Protection Act, 2023 applies, you may also raise a request with us using the contact details below. We may need to confirm that the request comes from you, or from the organisation responsible for the account, before we act on it.",
+      "You may ask what account information Paytrix holds about you, ask for a correction, or ask us to close an account that is no longer authorised. If you are a client-company user, start with your Paytrix administrator.",
+      "Where the Digital Personal Data Protection Act, 2023 applies, you may also raise a request with us using the contact details below. We may need to confirm that the request comes from you, or from the administrator responsible for the account, before we act on it.",
     ],
   },
   {

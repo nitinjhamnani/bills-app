@@ -47,7 +47,7 @@ const UTILITIES = [
   {
     icon: Droplets,
     title: "Water",
-    body: "Municipal and board connections for offices, plants, and properties your organisation looks after.",
+    body: "Municipal and board connections for offices, plants, and properties Paytrix looks after.",
   },
   {
     icon: Flame,
@@ -99,7 +99,7 @@ const SERVICES = [
     points: [
       "Prepaid balance before any utility is paid",
       "A ledger line for every movement",
-      "Organisation review before funds are credited",
+      "Paytrix review before funds are credited",
     ],
   },
   {
@@ -108,7 +108,7 @@ const SERVICES = [
     body: "When a fetch finds an amount due, a payment cycle opens. The client pays from the wallet. Organisation users pick up the cycle and mark it settled with the utility.",
     points: [
       "Client payment from the prepaid wallet",
-      "Organisation pick-up and settlement with the biller",
+      "Paytrix pick-up and settlement with the biller",
       "Maker–checker where your approval rules require it",
     ],
   },
@@ -127,7 +127,7 @@ const SERVICES = [
     title: "Controls and audit",
     body: "Access is split by role. Sensitive money actions can require a second person. An audit log records who moved money and when.",
     points: [
-      "Organisation and client user management",
+      "Paytrix and client user management",
       "Approval rules for settlement",
       "Audit extract by date range",
     ],
@@ -154,7 +154,7 @@ export default function ServicesPage() {
             Utility bill payments for companies, run as an operation.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-            Paytrix covers the utilities Indian organisations pay — electricity, water, gas, broadband, mobile, DTH, and more — and the controls around them. You enable the services your organisation offers. Client companies see only their own accounts and payments.
+            Paytrix covers the utilities Indian organisations pay — electricity, water, gas, broadband, mobile, DTH, and more — and the controls around them. You enable the services Paytrix offers. Client companies see only their own accounts and payments.
           </p>
         </div>
       </section>
@@ -215,7 +215,7 @@ export default function ServicesPage() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Organisation</p>
             <ul className="mt-4 flex flex-col gap-3 text-sm leading-relaxed text-slate-700">
               <li>Onboard client companies and their users.</li>
-              <li>Enable the utility services the organisation will settle.</li>
+              <li>Enable the utility services Paytrix will settle.</li>
               <li>Review wallet top-ups and credit the prepaid balance.</li>
               <li>Pick up client-paid bills and settle with the utility.</li>
               <li>Set approval rules and read the audit log.</li>
@@ -239,7 +239,7 @@ export default function ServicesPage() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">Tell us which utilities are on your book</h2>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
-              Share the companies, cities, and bill types you pay. Workspace access is issued after your organisation is onboarded.
+              Share the companies, cities, and bill types you pay. Workspace access is issued after Paytrix is onboarded.
             </p>
           </div>
           <Link

@@ -77,6 +77,9 @@ export default function ManagedBillsPage() {
   const toast = useToast();
   const router = useRouter();
   const clientId = getUser()?.clientId ?? "";
+  const isBranchUser = getUser()?.role === "BRANCH_USER";
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
+  const chooseBranch = !isBranchUser || branches.length > 1;
   const [bills, setBills] = useState<ManagedBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<BillFilter>("ALL");
@@ -104,6 +107,12 @@ export default function ManagedBillsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
+    const path = isBranchUser
+      ? `/api/v1/clients/${clientId}/branches/mine`
+      : `/api/v1/clients/${clientId}/branches`;
+    apiFetch<{ id: string; name: string }[]>(path)
+      .then(setBranches)
+      .catch(() => setBranches([]));
   }, []);
 
   function billCreated() {
@@ -201,7 +210,11 @@ export default function ManagedBillsPage() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Managed bills"
-        description="Every bill you track, showing the latest cycle. Due bills move to My Payments."
+        description={
+          isBranchUser
+            ? "Bills on your branches, showing the latest cycle. Due bills move to My Payments."
+            : "Bills from every branch, showing the latest cycle. Due bills move to My Payments."
+        }
         actions={
           <>
             <Button
@@ -248,7 +261,7 @@ export default function ManagedBillsPage() {
         })}
       </div>
 
-      <ListCard>
+      <ListCard fitContent={false}>
         <div className="shrink-0 border-b border-slate-100 px-4 py-3">
           <div className="relative sm:max-w-sm">
             <Search
@@ -289,7 +302,7 @@ export default function ManagedBillsPage() {
           />
         ) : (
           <Table>
-            <THead columns={["Biller", "Customer", "Amount", "Status", "Due", ""]} />
+            <THead columns={chooseBranch ? ["Branch", "Biller", "Customer", "Amount", "Status", "Due", ""] : ["Biller", "Customer", "Amount", "Status", "Due", ""]} />
             <TBody>
               {visible.map((bill) => (
                 <TR
@@ -297,6 +310,7 @@ export default function ManagedBillsPage() {
                   className="cursor-pointer"
                   onClick={() => router.push(`/client/managed-bills/${bill.id}`)}
                 >
+                  {chooseBranch && <TD className="font-medium text-slate-800">{bill.branchName ?? "—"}</TD>}
                   <TD>
                     <div className="flex items-center gap-3">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
@@ -350,6 +364,8 @@ export default function ManagedBillsPage() {
       <CreateBillModal
         open={modalOpen}
         clientId={clientId}
+        branches={chooseBranch ? branches : undefined}
+        fixedBranchId={!chooseBranch && branches.length === 1 ? branches[0].id : undefined}
         onClose={() => setModalOpen(false)}
         onCreated={billCreated}
       />
@@ -358,7 +374,7 @@ export default function ManagedBillsPage() {
         open={bulkModalOpen}
         onClose={() => setBulkModalOpen(false)}
         title="Bulk upload"
-        description="Download the template, fill in category, biller, consumer number, and mobile, then upload it. Each row is created and fetched."
+        description="Download the template, fill in category, biller, and consumer number, then upload it. Each row is created and fetched."
       >
         <div className="flex flex-col gap-4">
           <Button

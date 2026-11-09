@@ -19,12 +19,14 @@ export interface NavLink {
   label: string;
   icon: LucideIcon;
   badge?: number;
+  /** Match this link only on its own path, not on pages nested under it. */
+  exact?: boolean;
 }
 
 const SIDEBAR_COLLAPSED_KEY = "b2bfintech.sidebarCollapsed";
 
-function isNavActive(pathname: string, href: string) {
-  if (href.endsWith("/dashboard")) return pathname === href;
+function isNavActive(pathname: string, href: string, exact?: boolean) {
+  if (exact || href.endsWith("/dashboard")) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -120,7 +122,7 @@ export function AppShell({
             <ul className="flex flex-col gap-1">
               {nav.map((link) => {
                 const Icon = link.icon;
-                const active = isNavActive(pathname, link.href);
+                const active = isNavActive(pathname, link.href, link.exact);
                 const badge = link.badge ?? 0;
                 return (
                   <li key={link.href}>
@@ -202,7 +204,7 @@ export function AppShell({
         </header>
 
         <main className="min-h-0 flex-1 overflow-hidden bg-slate-50 p-4 sm:p-6 lg:p-8">
-          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-col gap-4 overflow-y-auto">
             {children}
           </div>
         </main>

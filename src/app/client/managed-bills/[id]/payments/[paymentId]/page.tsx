@@ -69,7 +69,7 @@ export default function ManagedBillPaymentDetailsPage() {
         `/api/v1/clients/${clientId}/managed-bills/${billId}/payments/${paymentId}`,
       );
       setPayment(next);
-      if (next.billStatus === "PAID") await loadDisputes();
+      if (next.billStatus === "PAID" && getUser()?.role !== "BRANCH_USER") await loadDisputes();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load bill");
     } finally {
@@ -91,7 +91,7 @@ export default function ManagedBillPaymentDetailsPage() {
         method: "POST",
         body: { reason },
       });
-      toast.success("Dispute raised — the organisation will review it");
+      toast.success("Dispute raised — Paytrix will review it");
       setDisputeModalOpen(false);
       await loadDisputes();
     } catch (err) {
@@ -204,7 +204,7 @@ export default function ManagedBillPaymentDetailsPage() {
                 }
               />
               <InfoField label="Picked up by" value={payment.orgPickedUpBy ?? "—"} />
-              <InfoField label="Paid by organisation" value={payment.orgPaidBy ?? "—"} />
+              <InfoField label="Paid by Paytrix" value={payment.orgPaidBy ?? "—"} />
               <InfoField label="BBPS transaction" value={payment.bbpsTransactionId ?? "—"} />
               <InfoField label="External transaction" value={payment.externalTransactionId ?? "—"} />
               {payment.billPayFailureReason && (

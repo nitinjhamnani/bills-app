@@ -16,9 +16,8 @@ export function userInitials(name: string) {
 }
 
 function profileHref(pathname: string) {
-  if (pathname.startsWith("/platform")) return "/platform/profile";
   if (pathname.startsWith("/client")) return "/client/profile";
-  return "/organisation/profile";
+  return "/paytrix/profile";
 }
 
 export function UserMenu({
@@ -116,7 +115,7 @@ export function UserMenu({
             </span>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
-              <p className="truncate font-mono text-[11px] text-slate-500">{user.phoneNumber}</p>
+              <p className="truncate font-mono text-[11px] text-slate-500">{user.userCode || user.phoneNumber}</p>
               <div className="mt-1.5">
                 <StatusBadge status={user.role} />
               </div>

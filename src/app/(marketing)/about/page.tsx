@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Building2, MapPin, Scale, Users } from "lucide-react";
+import { ArrowRight, Building2, MapPin, Users } from "lucide-react";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -29,11 +29,6 @@ const AUDIENCE = [
     title: "Client companies",
     body: "Businesses that need a controlled way to register consumer accounts, see what is due this cycle, and pay from a prepaid balance instead of ad-hoc transfers.",
   },
-  {
-    icon: Scale,
-    title: "Platform operators",
-    body: "The team that provisions organisations, keeps each tenant’s data separate, and oversees the network without sitting inside day-to-day bill work.",
-  },
 ];
 
 const PRINCIPLES = [
@@ -51,7 +46,7 @@ const PRINCIPLES = [
   },
   {
     title: "Access is issued, not self-serve",
-    body: "There is no public signup. Paytrix provisions an organisation. That organisation issues logins to its own staff and client companies.",
+    body: "There is no public signup. Paytrix issues logins to its own staff and to client companies.",
   },
 ];
 
@@ -94,7 +89,7 @@ export default function AboutPage() {
                 <strong className="text-slate-900">Due amounts are fetched, not guessed.</strong> Operators work from the latest bill, including a clear already-paid outcome.
               </li>
               <li>
-                <strong className="text-slate-900">Funds sit in a wallet first.</strong> Client companies pay from a prepaid balance. Settlement with the utility is the organisation’s next action.
+                <strong className="text-slate-900">Funds sit in a wallet first.</strong> Client companies pay from a prepaid balance. Settlement with the utility is Paytrix’s next action.
               </li>
               <li>
                 <strong className="text-slate-900">The trail survives the month.</strong> Reports cover bills, payments, wallets, funding, and settlement for the dates finance asks for.

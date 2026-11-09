@@ -38,6 +38,10 @@ export function MyProfileView() {
         </div>
         <dl className="mt-6 grid gap-4 border-t border-slate-100 pt-5 sm:grid-cols-2">
           <div>
+            <dt className="text-[11px] font-medium text-slate-400">User code</dt>
+            <dd className="mt-1 font-mono text-sm font-medium text-slate-900">{user.userCode || "—"}</dd>
+          </div>
+          <div>
             <dt className="text-[11px] font-medium text-slate-400">Phone</dt>
             <dd className="mt-1 font-mono text-sm font-medium text-slate-900">{user.phoneNumber}</dd>
           </div>

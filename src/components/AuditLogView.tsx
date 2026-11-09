@@ -62,7 +62,7 @@ export function AuditLogView({
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader title={title} description={description} />
-      <ListCard>
+      <ListCard fitContent={false}>
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div className="relative min-w-0 flex-1 sm:max-w-sm">
             <Search

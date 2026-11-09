@@ -16,6 +16,13 @@ import { cn } from "@/lib/cn";
 const ColumnLabelsContext = createContext<string[]>([]);
 const SetColumnLabelsContext = createContext<(labels: string[]) => void>(() => {});
 
+/** When true, a Table fills the remaining height of its card and scrolls, instead of growing the page. */
+const FillListContext = createContext(false);
+
+export function FillList({ children }: { children: React.ReactNode }) {
+  return <FillListContext.Provider value={true}>{children}</FillListContext.Provider>;
+}
+
 function nodeText(node: ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -28,18 +35,18 @@ function nodeText(node: ReactNode): string {
 }
 
 /**
- * The scroll container: fills whatever height its flex parent gives it (a `Card` with
- * `flex flex-1 min-h-0 flex-col` around it) and scrolls internally in both directions once
- * content overflows - the table's own header stays pinned via `THead`'s `sticky` position,
- * so long lists never grow the page itself. Below the `md` breakpoint the same rows render
+ * A table sizes to its rows, so a page that scrolls can show every row. Inside a fill list
+ * (`FillList`, used by `ListCard` when it fills the screen) the same table takes the leftover
+ * height and scrolls, with the header pinned. Below the `md` breakpoint the same rows render
  * as stacked cards.
  */
 export function Table({ children }: { children: React.ReactNode }) {
   const [labels, setLabels] = useState<string[]>([]);
+  const fill = useContext(FillListContext);
   return (
     <SetColumnLabelsContext.Provider value={setLabels}>
       <ColumnLabelsContext.Provider value={labels}>
-        <div className="data-table min-h-0 flex-1 overflow-auto">
+        <div className={fill ? "data-table min-h-0 flex-1 overflow-auto" : "data-table shrink-0 overflow-x-auto"}>
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             {children}
           </table>

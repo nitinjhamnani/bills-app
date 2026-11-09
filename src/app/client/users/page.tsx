@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { UsersTab } from "@/app/organisation/clients/[id]/UsersTab";
+import { UsersTab } from "@/app/paytrix/clients/[id]/UsersTab";
 
 export default function ClientUsersPage() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function ClientUsersPage() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Users"
-        description="Add operators for the bill desk. Admins can top up, set auto-pay, and manage staff."
+        description="Add an Admin or an Operator for this account."
       />
       <UsersTab clientId={clientId} usersPath={`/api/v1/clients/${clientId}/users`} />
     </div>

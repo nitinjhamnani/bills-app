@@ -4,6 +4,7 @@ import {
   FilePlus2,
   History,
   PackageCheck,
+  Undo2,
   RefreshCw,
   Send,
   XCircle,
@@ -18,8 +19,11 @@ export const EVENT_META: Record<string, { label: string; icon: LucideIcon; tone:
   FETCH_FAILED_TRANSIENT: { label: "Fetch failed — will retry", icon: AlertTriangle, tone: "warning" },
   FETCH_FAILED_PERMANENT: { label: "Fetch failed permanently", icon: XCircle, tone: "danger" },
   CLIENT_PAID: { label: "Paid by client", icon: Send, tone: "success" },
+  ASSIGNED: { label: "Assigned to a vendor", icon: PackageCheck, tone: "info" },
+  VENDOR_MARKED_PAID: { label: "Vendor marked paid", icon: CheckCircle2, tone: "success" },
+  VENDOR_REJECTED: { label: "Sent back by vendor", icon: Undo2, tone: "warning" },
   ORG_PICKED_UP: { label: "Picked up by organisation", icon: PackageCheck, tone: "info" },
-  ORG_PAID: { label: "Paid by organisation", icon: CheckCircle2, tone: "success" },
+  ORG_PAID: { label: "Paid by Paytrix", icon: CheckCircle2, tone: "success" },
   ORG_MARK_FAILED: { label: "Marked failed by organisation", icon: XCircle, tone: "danger" },
 };
 

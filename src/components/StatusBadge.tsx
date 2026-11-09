@@ -70,14 +70,14 @@ export function formatStatusLabel(status: string) {
     .join(" ");
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   const tone = statusTone(status);
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-tight ring-1 ${BADGE_CLASSES[tone]}`}
     >
       <StatusIcon status={status} />
-      {formatStatusLabel(status)}
+      {label ?? formatStatusLabel(status)}
     </span>
   );
 }

@@ -124,7 +124,7 @@ export default function ManagedBillDetailsPage() {
         `/api/v1/clients/${clientId}/managed-bills/${billId}/payments`,
       );
       setPayments(list);
-      await loadDisputes(list);
+      if (getUser()?.role !== "BRANCH_USER") await loadDisputes(list);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load bill history");
     } finally {
@@ -155,7 +155,7 @@ export default function ManagedBillDetailsPage() {
         method: "POST",
         body: { reason },
       });
-      toast.success("Dispute raised — the organisation will review it");
+      toast.success("Dispute raised — Paytrix will review it");
       setDisputeTarget(null);
       await loadDisputes(payments);
     } catch (err) {
@@ -367,7 +367,7 @@ export default function ManagedBillDetailsPage() {
             )}
           </div>
 
-          <div className="flex min-h-80 flex-1 flex-col gap-4">
+          <div className="flex shrink-0 flex-col gap-4">
             <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
               {FILTERS.map((item) => {
                 const active = filter === item.key;

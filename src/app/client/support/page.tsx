@@ -81,7 +81,7 @@ export default function ClientSupportPage() {
         method: "POST",
         body: { subject, description },
       });
-      toast.success("Ticket raised — the organisation has been notified");
+      toast.success("Ticket raised — Paytrix has been notified");
       setModalOpen(false);
       await load();
       setSelectedId(created.id);
@@ -129,7 +129,7 @@ export default function ClientSupportPage() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Support"
-        description="Chat with the organisation until the issue is resolved."
+        description="Chat with Paytrix until the issue is resolved."
         actions={
           <Button icon={<Plus size={16} />} onClick={openModal}>
             Raise a ticket
@@ -197,7 +197,7 @@ export default function ClientSupportPage() {
                 title={tickets.length === 0 ? "No tickets yet" : "No tickets match"}
                 description={
                   tickets.length === 0
-                    ? "Raise a ticket if something needs the organisation's help."
+                    ? "Raise a ticket if something needs Paytrix's help."
                     : "Try another status or clear the search."
                 }
                 action={
@@ -301,7 +301,7 @@ export default function ClientSupportPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title="Raise a ticket"
-        description="The first message starts the conversation with the organisation."
+        description="The first message starts the conversation with Paytrix."
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>

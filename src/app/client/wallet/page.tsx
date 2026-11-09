@@ -18,7 +18,7 @@ import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
-import type { LedgerEntryDto, PaymentMode, WalletBalance, WalletTopup } from "@/lib/types";
+import type { ClientAccount, LedgerEntryDto, PaymentMode, WalletBalance, WalletTopup } from "@/lib/types";
 import { API_BASE_URL } from "@/lib/workspace";
 
 const PAYMENT_MODES: PaymentMode[] = ["RTGS", "NEFT", "UPI", "CASH", "OTHER"];
@@ -153,6 +153,7 @@ export default function ClientWalletPage() {
   const [ledger, setLedger] = useState<LedgerEntryDto[]>([]);
   const [requests, setRequests] = useState<WalletTopup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>("ALL");
   const [ledgerSearch, setLedgerSearch] = useState("");
@@ -187,8 +188,25 @@ export default function ClientWalletPage() {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    if (user?.role === "CLIENT_OPERATOR") return;
+    let cancelled = false;
+    apiFetch<ClientAccount>("/api/v1/client/account")
+      .then((account) => {
+        if (cancelled) return;
+        if (account.clientType === "VENDOR") {
+          router.replace("/client/dashboard");
+          return;
+        }
+        setReady(true);
+        load();
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function closeModal() {
@@ -225,7 +243,7 @@ export default function ClientWalletPage() {
           idempotencyKey: crypto.randomUUID(),
         },
       });
-      toast.success("Top-up submitted — waiting for the organisation to accept it");
+      toast.success("Top-up submitted — waiting for Paytrix to accept it");
       closeModal();
       setTab("requests");
       await load();
@@ -284,7 +302,7 @@ export default function ClientWalletPage() {
   const canSubmit = Number(form.amount) > 0 && form.paymentReference.trim().length > 0;
   const requestedAmount = Number(form.amount);
 
-  if (user?.role === "CLIENT_OPERATOR") return null;
+  if (user?.role === "CLIENT_OPERATOR" || !ready) return null;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -292,7 +310,7 @@ export default function ClientWalletPage() {
         title="Wallet"
         description={
           canTopUp
-            ? "Funds every bill you submit. A top-up is credited only after the organisation accepts it."
+            ? "Funds every bill you submit. A top-up is credited only after Paytrix accepts it."
             : "Funds every bill you submit. A Client Admin requests a top-up when more funds are needed."
         }
         actions={
@@ -358,7 +376,7 @@ export default function ClientWalletPage() {
             counts={ledgerCounts}
             onChange={setLedgerFilter}
           />
-          <ListCard>
+          <ListCard fitContent={false}>
             <div className="shrink-0 border-b border-slate-100 px-4 py-3">
               <div className="relative sm:max-w-sm">
                 <Search
@@ -447,7 +465,7 @@ export default function ClientWalletPage() {
             counts={requestCounts}
             onChange={setRequestFilter}
           />
-          <ListCard>
+          <ListCard fitContent={false}>
             <div className="shrink-0 border-b border-slate-100 px-4 py-3">
               <div className="relative sm:max-w-sm">
                 <Search
@@ -475,7 +493,7 @@ export default function ClientWalletPage() {
                 title={requests.length === 0 ? "No top-up requests" : "No requests match"}
                 description={
                   requests.length === 0
-                    ? "Submit a top-up after you send money. It stays here until the organisation accepts it."
+                    ? "Submit a top-up after you send money. It stays here until Paytrix accepts it."
                     : "Try another status or clear the search."
                 }
                 action={
@@ -564,7 +582,7 @@ export default function ClientWalletPage() {
         open={selectedRequest !== null}
         onClose={() => setSelectedRequest(null)}
         title="Top-up request"
-        description="The wallet is credited only after the organisation accepts this request."
+        description="The wallet is credited only after Paytrix accepts this request."
         footer={
           selectedRequest?.documentId ? (
             <Button onClick={() => setProofId(selectedRequest.documentId as string)}>
@@ -600,7 +618,7 @@ export default function ClientWalletPage() {
         open={modalOpen}
         onClose={closeModal}
         title="Top up wallet"
-        description="Sent to the organisation for review. The wallet is credited once accepted."
+        description="Sent to Paytrix for review. The wallet is credited once accepted."
         footer={
           <>
             <Button variant="outline" onClick={closeModal}>
@@ -658,7 +676,7 @@ export default function ClientWalletPage() {
           </label>
           {Number.isFinite(requestedAmount) && requestedAmount > 0 && (
             <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
-              Requested credit: {inr(requestedAmount)}. It is added after the organisation accepts it.
+              Requested credit: {inr(requestedAmount)}. It is added after Paytrix accepts it.
             </p>
           )}
         </form>

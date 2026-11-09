@@ -17,29 +17,25 @@ const POINTS = [
   {
     icon: BadgeCheck,
     title: "Settle with the biller",
-    body: "Organisation teams pick up the cycle, settle, and keep an audit trail.",
+    body: "Paytrix picks up the cycle, settles, and keeps an audit trail.",
   },
 ];
 
 const ROLES = [
   {
-    title: "Organisation",
+    title: "Paytrix",
     body: "Onboard client companies, fund wallets, pick up payments, and settle with utilities.",
   },
   {
     title: "Client company",
     body: "Register consumer numbers, see what is due, and pay from a prepaid balance.",
   },
-  {
-    title: "Platform",
-    body: "Provision organisations and keep each tenant’s bill work separate.",
-  },
 ];
 
 const FAQS = [
   {
     q: "Who can sign in?",
-    a: "People whose organisation or client company has been issued a Paytrix login. There is no public self-signup. After sign-in you land in the platform, organisation, or client workspace that matches your role.",
+    a: "People whose client company has been issued a Paytrix login, and Paytrix staff. There is no public self-signup. After sign-in you land in the Paytrix or client workspace that matches your role.",
   },
   {
     q: "Which phone number or email do I use?",
@@ -47,7 +43,7 @@ const FAQS = [
   },
   {
     q: "I don’t have a password.",
-    a: "Ask the administrator who onboarded your organisation or client company. This page does not create accounts or reset passwords.",
+    a: "Ask the administrator who issued your login. This page does not create accounts or reset passwords.",
   },
   {
     q: "Can I pay a utility bill from this page?",
@@ -120,7 +116,7 @@ export default function LoginPage() {
               One login, the workspace your role is meant to see.
             </h2>
             <p className="mt-3 text-base leading-relaxed text-slate-600">
-              Platform, organisation, and client users never share a book. After you sign in, Paytrix opens only the records you are allowed to act on.
+              Paytrix staff and client users never share a book. After you sign in, Paytrix opens only the records you are allowed to act on.
             </p>
           </div>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
@@ -170,7 +166,7 @@ function ClosedAccess() {
         The Paytrix workspace is not on the public internet. There is no self-signup, and this site does not accept credentials.
       </p>
       <p className="mt-3 text-sm leading-relaxed text-slate-600">
-        When your organisation is onboarded, your administrator will issue a phone number or email and a password for the private workspace.
+        When Paytrix is onboarded, your administrator will issue a phone number or email and a password for the private workspace.
       </p>
     </>
   );

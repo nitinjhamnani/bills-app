@@ -1,19 +1,22 @@
 export type Role =
-  | "PLATFORM_ADMIN"
   | "ORGANISATION_ADMIN"
   | "MAKER"
   | "CHECKER"
   | "VIEWER"
+  | "SALES"
   | "CLIENT_ADMIN"
-  | "CLIENT_OPERATOR";
+  | "CLIENT_OPERATOR"
+  | "BRANCH_USER";
 
 export interface UserProfile {
   userId: string;
   phoneNumber: string;
+  userCode: string | null;
   displayName: string;
   role: Role;
   tenantSchema: string | null;
   clientId: string | null;
+  branchId: string | null;
 }
 
 export interface LoginResponse {
@@ -55,7 +58,7 @@ export interface PlatformOrganisationClient {
   clientName: string;
   clientCode: string | null;
   clientType: ClientType;
-  status: "ACTIVE" | "SUSPENDED" | "TERMINATED";
+  status: "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
   contactPhone: string | null;
   createdAt: string;
   admin: PlatformOrganisationUser | null;
@@ -90,7 +93,8 @@ export interface OrganisationMe {
   organisationCode: string;
 }
 
-export type ClientType = "CORPORATE" | "PARTNER";
+export type ClientType = "CORPORATE" | "VENDOR";
+export type CorporateKind = "COMPANY" | "INDIVIDUAL";
 
 export interface Client {
   id: string;
@@ -98,17 +102,91 @@ export interface Client {
   clientCode: string | null;
   contactPhone: string | null;
   clientType: ClientType;
-  status: "ACTIVE" | "SUSPENDED" | "TERMINATED";
+  corporateKind?: CorporateKind | null;
+  status: "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
   createdAt: string;
+  kycStatus?: "NOT_STARTED" | "PENDING" | "COMPLETE";
+  contractStatus?: "NOT_STARTED" | "PENDING" | "SIGNED";
+  detailsSubmittedAt?: string | null;
+  salesUserId?: string | null;
+  salesPersonName?: string | null;
+  branchCount?: number;
+}
+
+export interface SalesCorporate {
+  clientId: string;
+  clientName: string;
+  clientCode: string | null;
+  accountStatus: string;
+  onboardingStep: string;
+  businessAmount: number;
+  businessCount: number;
+  monthBusinessAmount?: number;
+  monthBusinessCount?: number;
+  unpaidCount: number;
+  withVendorCount: number;
+  waitingForCheckCount: number;
+  waitingToPayVendorCount: number;
+  reimbursedCount: number;
+}
+
+export interface SalesDashboard {
+  businessAmount: number;
+  businessCount: number;
+  monthBusinessAmount: number;
+  monthBusinessCount: number;
+  corporateCount: number;
+  inProgressCount: number;
+  corporates: SalesCorporate[];
+}
+
+export interface SalesPaidBill {
+  id: string;
+  clientName: string;
+  clientCode: string | null;
+  vendorId: string | null;
+  vendorName: string | null;
+  vendorCode: string | null;
+  billerName: string;
+  consumerNumber: string;
+  billNumber: string | null;
+  amount: number;
+  dueDate: string | null;
+  paidAt: string;
+  stage: string;
+}
+
+export interface SalesPaidReport {
+  totalAmount: number;
+  billCount: number;
+  bills: SalesPaidBill[];
+}
+
+export interface SalesBill {
+  id: string;
+  billerName: string;
+  consumerNumber: string;
+  amount: number;
+  dueDate: string | null;
+  stage: string;
 }
 
 export interface OrganisationUser {
   id: string;
   phoneNumber: string;
+  userCode: string;
   fullName: string;
   email: string | null;
   role: string;
   status: "ACTIVE" | "SUSPENDED";
+  corporates?: AssignedCorporate[];
+}
+
+export interface AssignedCorporate {
+  id: string;
+  clientName: string;
+  clientCode: string | null;
+  status: string;
 }
 
 export interface OrganisationBillServiceConfig {
@@ -125,6 +203,7 @@ export interface ClientBillServiceConfig {
 export interface ClientUser {
   id: string;
   phoneNumber: string;
+  userCode: string;
   fullName: string;
   role: string;
   status: "ACTIVE" | "SUSPENDED";
@@ -165,7 +244,7 @@ export interface AmountComponent {
 export interface ManagedBill {
   id: string;
   clientId: string;
-  /** Only populated on the organisation-wide view (lists every client's bills together). */
+  /** Only populated on Paytrix-wide view (lists every client's bills together). */
   clientName: string | null;
   clientCode: string | null;
   billServiceCode: string;
@@ -190,6 +269,8 @@ export interface ManagedBill {
   autoPayEnabled: boolean;
   createdAt: string;
   updatedAt: string;
+  branchId?: string | null;
+  branchName?: string | null;
 }
 
 /** One fetch/payment cycle for a bill - what My Payments (client and organisation side) lists. */
@@ -223,10 +304,38 @@ export interface BillPayment {
   externalTransactionId: string | null;
   billType: string | null;
   billPayFailureReason: string | null;
+  assignedVendorClientId?: string | null;
+  assignedVendorName?: string | null;
+  commissionPercent?: number | null;
+  commissionAmount?: number | null;
+  vendorMarkedPaidAt?: string | null;
+  vendorPaymentReference?: string | null;
+  vendorStage?: "ASSIGNED" | "IN_PROGRESS" | "VENDOR_PAID" | "VERIFIED" | "REIMBURSED" | null;
+  bbpsVerifiedAt?: string | null;
+  bbpsCheckNote?: string | null;
+  reimbursedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   awaitingChecker?: boolean;
   canSettle?: boolean;
+  branchId?: string | null;
+  branchName?: string | null;
+}
+
+export interface ClientAccount {
+  clientId: string;
+  clientName: string;
+  clientCode: string | null;
+  clientType: ClientType;
+  corporateKind: CorporateKind | null;
+  status: "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
+  legalName: string | null;
+  registrationNumber: string | null;
+  registeredAddress: string | null;
+  signingAuthority: string | null;
+  detailsSubmittedAt: string | null;
+  kycStatus: "NOT_STARTED" | "PENDING" | "COMPLETE";
+  contractStatus: "NOT_STARTED" | "PENDING" | "SIGNED";
 }
 
 export interface BillActivityLogEntry {
@@ -236,6 +345,9 @@ export interface BillActivityLogEntry {
     | "FETCH_FAILED_TRANSIENT"
     | "FETCH_FAILED_PERMANENT"
     | "CLIENT_PAID"
+    | "ASSIGNED"
+    | "VENDOR_MARKED_PAID"
+    | "VENDOR_REJECTED"
     | "ORG_PICKED_UP"
     | "ORG_PAID"
     | "ORG_MARK_FAILED";
@@ -280,7 +392,7 @@ export interface WalletTopup {
   createdAt: string;
 }
 
-/** Same as WalletTopup, plus which client it's for - only returned by the organisation-wide pending list. */
+/** Same as WalletTopup, plus which client it's for - only returned by Paytrix-wide pending list. */
 export interface PendingWalletTopup extends WalletTopup {
   clientId: string;
   clientName: string;
@@ -332,7 +444,7 @@ export interface SupportTicket {
   updatedAt: string;
 }
 
-/** Same as SupportTicket, plus which client it's for - only returned by the organisation-wide list. */
+/** Same as SupportTicket, plus which client it's for - only returned by Paytrix-wide list. */
 export interface OrganisationSupportTicket extends SupportTicket {
   clientId: string;
   clientName: string;
@@ -406,7 +518,7 @@ export interface ClientPortfolioRow {
   clientType: ClientType;
   status: "ACTIVE" | "SUSPENDED" | "TERMINATED";
   createdAt: string;
-  walletBalance: number;
+  walletBalance: number | null;
   totalBillPayments: number;
   totalPaidAmount: number;
   outstandingAmount: number;
@@ -506,8 +618,13 @@ export interface OrganisationGmvRow {
 }
 
 /** Which top-level module a role lands in after login. */
-export function moduleForRole(role: Role): "platform" | "organisation" | "client" {
-  if (role === "PLATFORM_ADMIN") return "platform";
-  if (role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR") return "client";
-  return "organisation";
+export function moduleForRole(role: Role): "paytrix" | "client" {
+  if (role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR" || role === "BRANCH_USER") return "client";
+  return "paytrix";
+}
+
+/** First page after login. Sales opens their own dashboard, not the Paytrix one. */
+export function homeForRole(role: Role): string {
+  if (role === "SALES") return "/paytrix/sales";
+  return `/${moduleForRole(role)}/dashboard`;
 }

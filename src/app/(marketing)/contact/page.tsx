@@ -146,7 +146,7 @@ export default function ContactPage() {
               This page is for enquiries. There is no public self-signup. After an organisation is onboarded, administrators receive workspace logins and issue access to their client companies.
             </p>
             <p className="mt-3 text-sm leading-relaxed text-slate-600">
-              If your organisation is already on Paytrix, sign in with the phone number or email on your account.
+              If you already have a login, sign in with the phone number or email on your account.
             </p>
             <Link href="/login" className="mt-6 inline-flex text-sm font-semibold text-indigo-700 hover:text-indigo-800">
               Go to login

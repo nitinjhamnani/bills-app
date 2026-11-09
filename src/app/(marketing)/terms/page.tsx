@@ -21,30 +21,30 @@ const SECTIONS = [
   {
     title: "1. Agreement",
     body: [
-      "These terms govern use of the Paytrix website and the Paytrix workspace. By using the site, or by signing in after your organisation is onboarded, you agree to these terms.",
+      "These terms govern use of the Paytrix website and the Paytrix workspace. By using the site, or by signing in after Paytrix is onboarded, you agree to these terms.",
       "Paytrix is a B2B bill payments platform for organisations and companies in India. It is a workspace for fetching utility bills, holding client funds in a prepaid wallet, paying due amounts, and recording settlement with billers. It is not a consumer payments app, and access is not open to the public.",
     ],
   },
   {
     title: "2. Who may use Paytrix",
     body: [
-      "Workspace access is issued by invitation. Paytrix provisions an organisation. That organisation issues logins to its own staff and to the client companies on its book.",
-      "You may use Paytrix only if you are authorised by the organisation or client company your account belongs to, and only for that entity’s utility bill work. You must keep your password confidential and tell your administrator if you believe the account has been misused.",
+      "Workspace access is issued by invitation. Paytrix issues logins to its own staff and to the client companies on its book.",
+      "You may use Paytrix only if you are authorised by Paytrix or the client company your account belongs to, and only for that entity’s utility bill work. You must keep your password confidential and tell your administrator if you believe the account has been misused.",
     ],
   },
   {
     title: "3. The workspace",
     body: [
-      "Organisation users can onboard client companies, enable utility services, review wallet top-ups, pick up client-paid bills, settle with billers, and read reports and the audit log. Client company users can register consumer accounts, fetch bills, fund a wallet, pay amounts that are due, and raise support tickets or disputes on their own payments.",
-      "Each role sees only the records it is allowed to see. Platform, organisation, and client users do not share a workspace.",
+      "Paytrix staff can onboard client companies, enable utility services, review wallet top-ups, pick up client-paid bills, settle with billers, and read reports and the audit log. Client company users can register consumer accounts, fetch bills, fund a wallet, pay amounts that are due, and raise support tickets or disputes on their own payments.",
+      "Each role sees only the records it is allowed to see. Paytrix staff and client users do not share a workspace.",
     ],
   },
   {
     title: "4. Bills, wallets, and settlement",
     body: [
       "A managed bill is the consumer account. A fetch shows the latest amount due, or that the biller reports the account as already paid. A payment cycle is created only when there is an amount to pay. An already-paid fetch does not create a payment.",
-      "Client companies pay from a prepaid wallet. The organisation credits that wallet after it accepts a top-up. Paying a bill debits the wallet. Settlement with the utility or other biller is a separate organisation action and may require a second approver where the organisation’s rules say so.",
-      "Paytrix records these steps. It does not replace the organisation’s own arrangement with a biller, or the client company’s duty to pay amounts that are genuinely due.",
+      "Client companies pay from a prepaid wallet. Paytrix credits that wallet after it accepts a top-up. Paying a bill debits the wallet. Settlement with the utility or other biller is a separate Paytrix action and may require a second approver where the rules say so.",
+      "Paytrix records these steps. It does not replace the client company’s duty to pay amounts that are genuinely due.",
     ],
   },
   {
@@ -57,13 +57,13 @@ const SECTIONS = [
   {
     title: "6. Fees",
     body: [
-      "Any fee Paytrix or the organisation charges for bill payments, wallet funding, or related services is the fee agreed when the organisation is onboarded, or shown in the workspace before the action is confirmed. These terms do not set a public price list.",
+      "Any fee Paytrix or Paytrix charges for bill payments, wallet funding, or related services is the fee agreed when Paytrix is onboarded, or shown in the workspace before the action is confirmed. These terms do not set a public price list.",
     ],
   },
   {
     title: "7. Support and disputes",
     body: [
-      "Client companies should raise a ticket or a payment dispute inside the workspace so the conversation stays on the bill it belongs to. Paytrix and the organisation will look at the fetch, the wallet entry, and the settlement record. Raising a dispute does not by itself reverse a wallet debit or a settlement already made.",
+      "Client companies should raise a ticket or a payment dispute inside the workspace so the conversation stays on the bill it belongs to. Paytrix and Paytrix will look at the fetch, the wallet entry, and the settlement record. Raising a dispute does not by itself reverse a wallet debit or a settlement already made.",
     ],
   },
   {
@@ -75,13 +75,13 @@ const SECTIONS = [
   {
     title: "9. Intellectual property",
     body: [
-      "The Paytrix name, the site, and the workspace software belong to their owner. These terms give you a limited right to use them for your organisation’s or client company’s bill work. They do not transfer any other right.",
+      "The Paytrix name, the site, and the workspace software belong to their owner. These terms give you a limited right to use them for Paytrix’s or client company’s bill work. They do not transfer any other right.",
     ],
   },
   {
     title: "10. Suspension",
     body: [
-      "Paytrix or the organisation administrator may suspend or close an account that breaches these terms, that is no longer authorised, or that creates a risk to other users or to funds. Wallet balances and open bills at that point are handled with the organisation, using the ledger in the workspace.",
+      "Paytrix or Paytrix administrator may suspend or close an account that breaches these terms, that is no longer authorised, or that creates a risk to other users or to funds. Wallet balances and open bills at that point are handled with Paytrix, using the ledger in the workspace.",
     ],
   },
   {

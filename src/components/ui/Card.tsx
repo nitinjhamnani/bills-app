@@ -1,4 +1,5 @@
 import { cn } from "@/lib/cn";
+import { FillList } from "@/components/ui/Table";
 
 export function Card({
   className,
@@ -20,11 +21,9 @@ export function Card({
 }
 
 /**
- * A `Card` that fills whatever height its parent gives it and clips its own overflow, so a
- * `Table` (or any `flex-1 min-h-0 overflow-auto` region) placed inside scrolls internally
- * instead of growing the page. Use this for the one primary list on a page; for pages with
- * several shorter lists stacked vertically, a plain `Card` with the page itself scrolling is
- * usually the better fit.
+ * A card around a list. By default it is as tall as its rows and does not shrink, so a
+ * scrolling page shows every row. Pass `fitContent={false}` for the one list that should
+ * fill the screen and scroll inside itself.
  */
 export function ListCard({
   className,
@@ -35,17 +34,18 @@ export function ListCard({
   children: React.ReactNode;
   fitContent?: boolean;
 }) {
-  return (
+  const card = (
     <Card
       className={cn(
-        "flex flex-col min-h-0 flex-1 overflow-hidden border-slate-200/90 shadow-xs max-h-full",
-        fitContent && "h-auto max-h-full",
+        "flex flex-col overflow-hidden border-slate-200/90 shadow-xs",
+        fitContent ? "shrink-0" : "min-h-0 max-h-full flex-1",
         className,
       )}
     >
       {children}
     </Card>
   );
+  return fitContent ? card : <FillList>{card}</FillList>;
 }
 
 

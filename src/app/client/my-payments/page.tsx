@@ -49,6 +49,7 @@ function inr(amount: number) {
 export default function ClientMyPaymentsPage() {
   const toast = useToast();
   const clientId = getUser()?.clientId ?? "";
+  const canPay = getUser()?.role !== "BRANCH_USER";
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -90,7 +91,7 @@ export default function ClientMyPaymentsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    loadWalletBalance();
+    if (canPay) loadWalletBalance();
   }, []);
 
   const categoryOptions = useMemo(() => {
@@ -208,7 +209,7 @@ export default function ClientMyPaymentsPage() {
       });
       setConfirmIds(null);
       await load();
-      await loadWalletBalance();
+      if (canPay) await loadWalletBalance();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Payment failed");
     } finally {
@@ -222,7 +223,11 @@ export default function ClientMyPaymentsPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="My Payments"
-        description="Bills that are due. Pay one, or select several and pay them together."
+        description={
+          canPay
+            ? "Bills that are due. Pay one, or select several and pay them together."
+            : "Fetched cycles for your branches. Payment is made from the corporate wallet."
+        }
         actions={
           <Button
             variant="outline"
@@ -246,10 +251,12 @@ export default function ClientMyPaymentsPage() {
             {visible.length}
           </span>
         </span>
-        <span className="flex items-center gap-2 text-xs font-medium text-slate-500">
-          <Wallet size={14} />
-          {walletBalance != null ? inr(walletBalance) : "—"}
-        </span>
+        {canPay && (
+          <span className="flex items-center gap-2 text-xs font-medium text-slate-500">
+            <Wallet size={14} />
+            {walletBalance != null ? inr(walletBalance) : "—"}
+          </span>
+        )}
       </div>
 
       {activeFilterCount > 0 && (
@@ -282,8 +289,8 @@ export default function ClientMyPaymentsPage() {
         </div>
       )}
 
-      <ListCard>
-        {selectedIds.size > 0 && (
+      <ListCard fitContent={false}>
+        {canPay && selectedIds.size > 0 && (
           <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-indigo-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-semibold text-slate-800">
               {selectedIds.size} selected
@@ -318,20 +325,24 @@ export default function ClientMyPaymentsPage() {
               <Table>
                 <THead
                   columns={[
-                    <input
-                      key="select-all"
-                      type="checkbox"
-                      aria-label="Select all visible payments"
-                      checked={allVisibleSelected}
-                      onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-slate-300"
-                    />,
+                    ...(canPay
+                      ? [
+                          <input
+                            key="select-all"
+                            type="checkbox"
+                            aria-label="Select all visible payments"
+                            checked={allVisibleSelected}
+                            onChange={toggleSelectAll}
+                            className="h-4 w-4 rounded border-slate-300"
+                          />,
+                        ]
+                      : []),
                     "Biller",
                     "Consumer no.",
                     "Amount",
                     "Status",
                     "Due",
-                    "",
+                    ...(canPay ? [""] : []),
                   ]}
                 />
                 <TBody>
@@ -340,6 +351,7 @@ export default function ClientMyPaymentsPage() {
                     return (
                       <Fragment key={payment.id}>
                         <TR className="cursor-pointer" onClick={() => toggleExpand(payment.id)}>
+                          {canPay && (
                           <TD onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
@@ -349,6 +361,7 @@ export default function ClientMyPaymentsPage() {
                               className="h-4 w-4 rounded border-slate-300"
                             />
                           </TD>
+                          )}
                           <TD>
                             <div className="flex items-start gap-2">
                               <span className="mt-0.5 text-slate-400">
@@ -359,6 +372,9 @@ export default function ClientMyPaymentsPage() {
                                 <p className="text-[11px] font-medium text-slate-400">
                                   {payment.billServiceName}
                                 </p>
+                                {payment.branchName && (
+                                  <p className="text-[11px] font-medium text-slate-500">{payment.branchName}</p>
+                                )}
                               </div>
                             </div>
                           </TD>
@@ -372,6 +388,7 @@ export default function ClientMyPaymentsPage() {
                             <StatusBadge status={payment.paymentStatus} />
                           </TD>
                           <TD className="text-slate-500">{formatMaybeDate(payment.dueDate)}</TD>
+                          {canPay && (
                           <TD onClick={(e) => e.stopPropagation()}>
                             <Button
                               size="sm"
@@ -381,10 +398,11 @@ export default function ClientMyPaymentsPage() {
                               Pay
                             </Button>
                           </TD>
+                          )}
                         </TR>
                         {expanded && (
                           <TR className="hover:bg-transparent">
-                            <TD colSpan={7} className="bg-slate-50 px-4 py-3 whitespace-normal!">
+                            <TD colSpan={canPay ? 7 : 5} className="bg-slate-50 px-4 py-3 whitespace-normal!">
                               <PaymentDetail payment={payment} />
                             </TD>
                           </TR>
@@ -398,6 +416,7 @@ export default function ClientMyPaymentsPage() {
 
             <div className="min-h-0 flex-1 overflow-auto p-3 md:hidden">
               <div className="mb-2 flex items-center justify-between px-1">
+                {canPay ? (
                 <button
                   type="button"
                   onClick={toggleSelectAll}
@@ -405,6 +424,9 @@ export default function ClientMyPaymentsPage() {
                 >
                   {allVisibleSelected ? "Clear selection" : "Select all"}
                 </button>
+                ) : (
+                  <span />
+                )}
                 <span className="text-xs text-slate-500">{visible.length} bills</span>
               </div>
               <ul className="flex flex-col gap-3">
@@ -416,6 +438,7 @@ export default function ClientMyPaymentsPage() {
                       className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[var(--shadow-card)]"
                     >
                       <div className="flex items-start gap-3 p-4">
+                        {canPay && (
                         <input
                           type="checkbox"
                           aria-label={`Select ${payment.billerName}`}
@@ -423,6 +446,7 @@ export default function ClientMyPaymentsPage() {
                           onChange={() => toggleSelect(payment.id)}
                           className="mt-1 h-5 w-5 rounded border-slate-300"
                         />
+                        )}
                         <div className="min-w-0 flex-1">
                           <button
                             type="button"
@@ -460,6 +484,7 @@ export default function ClientMyPaymentsPage() {
                           <PaymentDetail payment={payment} />
                         </div>
                       )}
+                      {canPay && (
                       <div className="border-t border-slate-100 px-4 py-3">
                         <Button
                           size="sm"
@@ -470,6 +495,7 @@ export default function ClientMyPaymentsPage() {
                           Pay
                         </Button>
                       </div>
+                      )}
                     </li>
                   );
                 })}
