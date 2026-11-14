@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Hash, Plus } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { getUser } from "@/lib/auth";
+import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { ListCard } from "@/components/ui/Card";
 import { Checkbox, Field } from "@/components/ui/Field";
@@ -24,6 +25,7 @@ export function RangesTab({ onCount }: { onCount?: (count: number) => void }) {
   const [maxAmount, setMaxAmount] = useState("");
   const [openEnded, setOpenEnded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,11 +75,27 @@ export function RangesTab({ onCount }: { onCount?: (count: number) => void }) {
     }
   }
 
+  async function setActive(range: CommissionRange, active: boolean) {
+    setTogglingId(range.id);
+    try {
+      await apiFetch(`/api/v1/paytrix/commissions/ranges/${range.id}/active`, {
+        method: "PATCH",
+        body: { active },
+      });
+      toast.success(active ? "Range activated" : "Range deactivated");
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update this range");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs font-medium text-slate-500">
-          Ranges are inclusive. Two ranges cannot share an amount, and a saved range stays in the catalog.
+          Ranges are inclusive. Two active ranges cannot share an amount. Only active ranges appear in the commission form.
         </p>
         {canAdd && (
           <Button icon={<Plus size={16} />} onClick={() => setOpen(true)}>
@@ -88,7 +106,7 @@ export function RangesTab({ onCount }: { onCount?: (count: number) => void }) {
 
       <ListCard fitContent={false}>
         {loading ? (
-          <TableSkeleton cols={1} />
+          <TableSkeleton cols={3} />
         ) : ranges.length === 0 ? (
           <EmptyState
             icon={Hash}
@@ -98,11 +116,28 @@ export function RangesTab({ onCount }: { onCount?: (count: number) => void }) {
           />
         ) : (
           <Table>
-            <THead columns={["Amount range"]} />
+            <THead columns={["Amount range", "Status", ""]} />
             <TBody>
               {ranges.map((range) => (
-                <TR key={range.id}>
+                <TR key={range.id} className={range.isActive ? "" : "text-slate-400"}>
                   <TD className="font-semibold text-slate-900">{formatRange(range.minAmount, range.maxAmount)}</TD>
+                  <TD>
+                    <StatusBadge status={range.isActive ? "ACTIVE" : "DISABLED"} label={range.isActive ? "Active" : "Inactive"} />
+                  </TD>
+                  <TD>
+                    {canAdd && (
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={togglingId === range.id}
+                          onClick={() => setActive(range, !range.isActive)}
+                        >
+                          {range.isActive ? "Deactivate" : "Activate"}
+                        </Button>
+                      </div>
+                    )}
+                  </TD>
                 </TR>
               ))}
             </TBody>

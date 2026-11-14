@@ -32,12 +32,13 @@ interface Branch {
   id: string;
   name: string;
   address: string | null;
+  state: string | null;
+  location: string | null;
   code: string | null;
-  comment: string | null;
   users: BranchUser[];
 }
 
-const emptyEdit = { name: "", address: "", code: "" };
+const emptyEdit = { name: "", address: "", state: "", location: "", code: "" };
 
 function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
@@ -176,7 +177,7 @@ export default function BranchDetailPage() {
     try {
       await apiFetch(`/api/v1/clients/${clientId}/branches/${branchId}`, {
         method: "PATCH",
-        body: { ...editForm, comment: branch?.comment ?? "" },
+        body: editForm,
       });
       toast.success("Branch updated");
       setEditing(false);
@@ -226,6 +227,8 @@ export default function BranchDetailPage() {
                   setEditForm({
                     name: branch.name,
                     address: branch.address ?? "",
+                    state: branch.state ?? "",
+                    location: branch.location ?? "",
                     code: branch.code ?? "",
                   });
                   setEditing(true);
@@ -247,6 +250,8 @@ export default function BranchDetailPage() {
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-4">
               <InfoField label="Code" value={branch.code ?? "—"} />
               <InfoField label="Address" value={branch.address ?? "—"} />
+              <InfoField label="State" value={branch.state ?? "—"} />
+              <InfoField label="Location" value={branch.location ?? "—"} />
               <InfoField label="Users" value={branch.users.length} />
               <InfoField label="Managed bills" value={bills.length} />
             </dl>
@@ -432,7 +437,7 @@ export default function BranchDetailPage() {
         open={editing}
         onClose={() => !busy && setEditing(false)}
         title="Edit branch"
-        description="Update the name, address, or code. The code must stay unique for this company."
+        description="Update the name, address, state, location, or code. The code must stay unique for this company."
         footer={
           <>
             <Button variant="outline" onClick={() => setEditing(false)} disabled={busy}>
@@ -447,6 +452,8 @@ export default function BranchDetailPage() {
         <form id="edit-branch" onSubmit={saveBranch} className="flex flex-col gap-4">
           <Field label="Branch name" required value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
           <Field label="Branch address" value={editForm.address} onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+          <Field label="State" value={editForm.state} onChange={(e) => setEditForm({ ...editForm, state: e.target.value })} />
+          <Field label="Location" value={editForm.location} onChange={(e) => setEditForm({ ...editForm, location: e.target.value })} />
           <Field
             label="Branch code"
             hint="Optional. Must be unique for this company."

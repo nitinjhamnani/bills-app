@@ -1,6 +1,11 @@
 import { clearSession, getToken } from "./auth";
 import { API_BASE_URL } from "./workspace";
 
+function withRequestId(message: string, requestId: string | null) {
+  if (!requestId) return message;
+  return `${message} (request ${requestId})`;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -111,6 +116,7 @@ export async function apiFetch<T>(
       } catch {
         // response body wasn't JSON - fall back to the generic message above
       }
+      message = withRequestId(message, response.headers.get("X-Request-Id"));
       if (auth) logoutOnForbidden(response.status);
       throw new ApiError(message, response.status, errorCode);
     }
@@ -133,7 +139,7 @@ export async function extractErrorMessage(
 ): Promise<string> {
   try {
     const errorBody = await response.json();
-    return errorBody.message ?? fallback;
+    return withRequestId(errorBody.message ?? fallback, response.headers.get("X-Request-Id"));
   } catch {
     return fallback;
   }

@@ -67,9 +67,9 @@ function formatWhen(iso: string) {
 
 function bucket(bill: ManagedBill): Exclude<BillFilter, "ALL"> | "OTHER" {
   if (bill.lastFetchFailed || bill.billStatus === "FAILED") return "FAILED";
-  if (bill.billStatus === "DUE" || bill.billStatus === "PAID" || bill.billStatus === "PROCESSING") {
-    return bill.billStatus;
-  }
+  if (bill.billStatus === "DUE") return "DUE";
+  if (bill.billStatus === "PAID") return "PAID";
+  if (bill.billStatus === "PROCESSING") return "PROCESSING";
   return "OTHER";
 }
 

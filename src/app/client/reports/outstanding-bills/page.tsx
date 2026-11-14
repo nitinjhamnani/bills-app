@@ -96,7 +96,7 @@ export default function ClientOutstandingBillsReportPage() {
         title="Outstanding Bills"
         description="Bills fetched but not yet paid, as of now."
         actions={
-          <Button size="sm" onClick={() => router.push("/client/my-payments")}>
+          <Button size="sm" onClick={() => router.push("/client/my-dues")}>
             Pay now
           </Button>
         }
@@ -117,7 +117,7 @@ export default function ClientOutstandingBillsReportPage() {
         ]}
         emptyDescription="Every fetched bill has been paid."
         rowKey={(p) => p.id}
-        onRowClick={(p) => router.push("/client/my-payments")}
+        onRowClick={(p) => router.push("/client/my-dues")}
       />
     </div>
   );

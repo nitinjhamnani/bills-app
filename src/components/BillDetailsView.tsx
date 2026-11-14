@@ -1,10 +1,6 @@
-import { Receipt } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
-import { Card, CardHeader, ListCard } from "@/components/ui/Card";
-import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
-import { TableSkeleton } from "@/components/ui/Skeleton";
-import { EmptyState } from "@/components/ui/EmptyState";
-import type { BillLedgerEntry, BillPayment } from "@/lib/types";
+import { Card, CardHeader } from "@/components/ui/Card";
+import type { BillPayment } from "@/lib/types";
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -17,15 +13,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function BillDetailsView({
-  payment,
-  transactions,
-  transactionsLoading,
-}: {
-  payment: BillPayment;
-  transactions: BillLedgerEntry[];
-  transactionsLoading: boolean;
-}) {
+export function BillDetailsView({ payment }: { payment: BillPayment }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="grid shrink-0 grid-cols-1 gap-4 lg:grid-cols-2">
@@ -109,55 +97,6 @@ export function BillDetailsView({
         </Card>
       </div>
 
-      <ListCard>
-        <CardHeader title="Related transactions" />
-        {transactionsLoading ? (
-          <TableSkeleton cols={6} rows={2} />
-        ) : transactions.length === 0 ? (
-          <EmptyState
-            icon={Receipt}
-            title="No transactions yet"
-            description="Nothing has moved in the wallet for this bill payment yet."
-          />
-        ) : (
-          <Table>
-            <THead
-              columns={[
-                "When",
-                "Type",
-                "Category",
-                "Amount",
-                "Balance after",
-                "Description",
-              ]}
-            />
-            <TBody>
-              {transactions.map((t, i) => (
-                <TR key={i}>
-                  <TD className="text-slate-500">
-                    {new Date(t.createdAt).toLocaleString()}
-                  </TD>
-                  <TD
-                    className={
-                      t.entryType === "CREDIT"
-                        ? "font-medium text-emerald-600"
-                        : "font-medium text-red-600"
-                    }
-                  >
-                    {t.entryType}
-                  </TD>
-                  <TD>
-                    <StatusBadge status={t.referenceType} />
-                  </TD>
-                  <TD>₹{t.amount.toLocaleString("en-IN")}</TD>
-                  <TD>₹{t.balanceAfter.toLocaleString("en-IN")}</TD>
-                  <TD className="text-slate-500">{t.description ?? "—"}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
-        )}
-      </ListCard>
     </div>
   );
 }

@@ -8,9 +8,11 @@ import {
   FileText,
   GitBranch,
   MessageCircle,
+  Receipt,
   Send,
   Users,
   BarChart3,
+  ArrowLeftRight,
 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
@@ -24,6 +26,7 @@ const CORPORATE_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/client/wallet", label: "Wallet", icon: Wallet, roles: ["CLIENT_ADMIN"] },
   { href: "/client/branches", label: "Branches", icon: GitBranch, roles: ["CLIENT_ADMIN"] },
   { href: "/client/managed-bills", label: "Managed Bills", icon: FileText },
+  { href: "/client/my-dues", label: "My Dues", icon: Receipt },
   { href: "/client/my-payments", label: "My Payments", icon: Send },
   { href: "/client/support", label: "Support", icon: MessageCircle },
   { href: "/client/reports", label: "Reports", icon: BarChart3, roles: ["CLIENT_ADMIN"] },
@@ -32,7 +35,8 @@ const CORPORATE_NAV: Array<NavLink & { roles?: Role[] }> = [
 
 const VENDOR_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/client/assigned-bills", label: "Assigned bills", icon: Send },
+  { href: "/client/assigned-bills", label: "My Payments", icon: Send },
+  { href: "/client/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/client/support", label: "Support", icon: MessageCircle },
   { href: "/client/users", label: "Users", icon: Users, roles: ["CLIENT_ADMIN"] },
 ];

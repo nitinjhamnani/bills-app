@@ -2,54 +2,29 @@ export interface CommissionRange {
   id: string;
   minAmount: number;
   maxAmount: number | null;
-  createdAt: string;
+  isActive: boolean;
 }
 
-export interface CommissionVendorRate {
+export interface Commission {
   id: string;
-  vendorClientId: string;
+  minRange: number;
+  maxRange: number | null;
+  categoryId: string;
+  categoryCode: string | null;
+  categoryName: string;
+  operatorId: string;
+  operatorName: string;
+  vendorId: string;
   vendorName: string;
-  commissionPercent: number | null;
-  active: boolean;
-  pendingProposalId: string | null;
-  pendingCommissionPercent: number | null;
-}
-
-export interface CommissionRule {
-  id: string;
-  categoryId: string;
-  categoryName: string;
-  providerBillerId: string;
-  providerName: string;
-  range: { id: string; minAmount: number; maxAmount: number | null };
-  vendors: CommissionVendorRate[];
-  highestCommissionPercent: number | null;
-  active: boolean;
+  commission: number;
+  status: "APPROVED" | "DRAFT";
+  isActive: boolean;
   createdAt: string;
-}
-
-export interface VendorCommissionRule {
-  id: string;
-  categoryId: string;
-  categoryName: string;
-  providerBillerId: string;
-  providerName: string;
-  range: { id: string; minAmount: number; maxAmount: number | null };
-  commissionPercent: number | null;
-  rateActive: boolean;
-  pendingProposalId: string | null;
-  pendingCommissionPercent: number | null;
-  createdAt: string;
-}
-
-export interface CommissionHistoryEntry {
-  id: string;
-  vendorClientId: string | null;
-  vendorName: string | null;
-  eventType: string;
-  commissionPercent: number | null;
-  actor: string;
-  createdAt: string;
+  updatedAt: string;
+  createdById: string | null;
+  createdByName: string | null;
+  updatedById: string | null;
+  updatedByName: string | null;
 }
 
 export function formatRange(minAmount: number, maxAmount: number | null) {
@@ -58,36 +33,28 @@ export function formatRange(minAmount: number, maxAmount: number | null) {
   return maxAmount == null ? `${money(minAmount)} and above` : `${money(minAmount)} – ${money(maxAmount)}`;
 }
 
+export interface CommissionLogEntry {
+  id: string;
+  action: string;
+  summary: string;
+  actorUserId: string | null;
+  actorName: string | null;
+  createdAt: string;
+}
+
+export function formatWhen(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function formatPercent(value: number | null | undefined) {
   if (value == null) return "—";
   return `${Number(value)}%`;
-}
-
-export function historyText(entry: CommissionHistoryEntry) {
-  const vendor = entry.vendorName ?? "A vendor";
-  const percent = formatPercent(entry.commissionPercent);
-  switch (entry.eventType) {
-    case "VENDOR_ADDED":
-      return `${vendor} was added`;
-    case "VENDOR_REMOVED":
-      return `${vendor} was removed`;
-    case "RATE_ENTERED":
-      return `Paytrix set ${vendor} to ${percent}`;
-    case "BID_SUBMITTED":
-      return `${vendor} submitted ${percent}`;
-    case "BID_ACCEPTED":
-      return `Paytrix accepted ${vendor} at ${percent}`;
-    case "BID_REJECTED":
-      return `Paytrix rejected ${vendor}'s ${percent} bid`;
-    case "VENDOR_PAUSED":
-      return `${vendor} was paused`;
-    case "VENDOR_RESUMED":
-      return `${vendor} was resumed`;
-    case "RULE_ACTIVATED":
-      return "The rule was activated";
-    case "RULE_DEACTIVATED":
-      return "The rule was deactivated";
-    default:
-      return entry.eventType;
-  }
 }

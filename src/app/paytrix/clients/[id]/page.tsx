@@ -30,11 +30,12 @@ import { cn } from "@/lib/cn";
 import type { Client, OrganisationUser } from "@/lib/types";
 import { OverviewTab } from "./OverviewTab";
 import { TransactionsTab } from "./TransactionsTab";
+import { VendorTransactionsTab } from "./VendorTransactionsTab";
 import { BillsTab } from "./BillsTab";
 import { ServicesTab } from "./ServicesTab";
 import { UsersTab } from "./UsersTab";
 import { BranchesTab } from "./BranchesTab";
-import { RulesTab } from "../../commissions/RulesTab";
+import { CommissionsTab } from "../../commissions/CommissionsTab";
 
 const BASE_TABS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -52,8 +53,11 @@ function clientInitials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "C";
 }
 
-function formatOnboarded(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
+function formatOnboarded(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -162,9 +166,9 @@ export default function ClientDetailPage() {
   const tabs = awaitingActivation
     ? [ABOUT_TAB]
     : vendor
-      ? [BASE_TABS[0], BASE_TABS[2], BASE_TABS[3], RULES_TAB, BASE_TABS[4]]
+      ? [BASE_TABS[0], BASE_TABS[1], BASE_TABS[2], BASE_TABS[3], RULES_TAB, BASE_TABS[4]]
       : [...BASE_TABS, BRANCHES_TAB];
-  const shownTab = awaitingActivation ? "about" : vendor && tab === "transactions" ? "overview" : tab;
+  const shownTab = awaitingActivation ? "about" : tab;
   const listedStatus = client ? onboardingStatus(client) : null;
 
   return (
@@ -320,17 +324,19 @@ export default function ClientDetailPage() {
             </p>
             <OnboardingTracker
               kind={client.corporateKind}
-              companyDone={client.detailsSubmittedAt != null}
+              companyDone={client.detailsSubmitted ?? false}
               kycDone={client.kycStatus === "COMPLETE"}
               contractDone={client.contractStatus === "SIGNED"}
             />
           </div>
         )}
         {shownTab === "overview" && <OverviewTab clientId={clientId} clientType={client?.clientType} />}
-        {shownTab === "transactions" && !vendor && <TransactionsTab clientId={clientId} />}
-        {shownTab === "bills" && <BillsTab clientId={clientId} />}
+        {shownTab === "transactions" && (vendor
+          ? <VendorTransactionsTab clientId={clientId} />
+          : <TransactionsTab clientId={clientId} />)}
+        {shownTab === "bills" && <BillsTab clientId={clientId} clientType={client?.clientType} />}
         {shownTab === "services" && <ServicesTab clientId={clientId} />}
-        {shownTab === "rules" && <RulesTab vendorId={clientId} />}
+        {shownTab === "rules" && <CommissionsTab vendorId={clientId} />}
         {shownTab === "users" && <UsersTab clientId={clientId} />}
         {shownTab === "branches" && client?.clientType === "CORPORATE" && <BranchesTab clientId={clientId} />}
       </div>}

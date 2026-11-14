@@ -1,16 +1,16 @@
 "use client";
 
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RulesTab } from "./RulesTab";
+import { CommissionsTab } from "./CommissionsTab";
 
 export default function CommissionsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Commissions"
-        description="A rule covers one category, provider, and amount range. Vendors on it bid a rate, and the highest live rate is assigned."
+        description="Each commission is one vendor's rate for an operator and amount range. A paid bill goes to the vendor with the highest approved, active commission that covers it."
       />
-      <RulesTab />
+      <CommissionsTab />
     </div>
   );
 }

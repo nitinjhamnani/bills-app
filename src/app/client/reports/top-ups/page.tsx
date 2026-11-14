@@ -42,7 +42,7 @@ export default function ClientTopUpReportPage() {
   }, [clientId, range.generated, range.applied.from, range.applied.to]);
 
   const total = useMemo(
-    () => rows.filter((r) => r.status === "COMPLETED").reduce((sum, row) => sum + row.amount, 0),
+    () => rows.filter((r) => r.status === "APPROVED").reduce((sum, row) => sum + row.amount, 0),
     [rows],
   );
 
@@ -76,7 +76,7 @@ export default function ClientTopUpReportPage() {
         rowKey={(r) => r.id}
         summary={[
           { label: "Requests", value: String(rows.length) },
-          { label: "Completed amount", value: formatInr(total), tone: "success" },
+          { label: "Approved amount", value: formatInr(total), tone: "success" },
         ]}
       />
     </div>

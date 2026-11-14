@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Inbox, Plus, Search, Wallet as WalletIcon } from "lucide-react";
-import { apiFetch, ApiError, trackedFetch } from "@/lib/api-client";
+import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -32,11 +32,8 @@ const MODE_LABELS: Record<PaymentMode, string> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  TOPUP: "Top-up",
-  BILL_PAYMENT: "Bill payment",
-  REFUND: "Refund",
-  FEE: "Fee",
-  ADJUSTMENT: "Adjustment",
+  RECHARGE: "Recharge",
+  ELECTRICITY: "Electricity",
 };
 
 const TABS = [
@@ -46,7 +43,7 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 type LedgerFilter = "ALL" | "CREDIT" | "DEBIT";
-type RequestFilter = "ALL" | "PENDING" | "COMPLETED" | "REJECTED";
+type RequestFilter = "ALL" | "PENDING" | "APPROVED" | "REJECTED";
 
 const LEDGER_FILTERS: { key: LedgerFilter; label: string }[] = [
   { key: "ALL", label: "All" },
@@ -57,7 +54,7 @@ const LEDGER_FILTERS: { key: LedgerFilter; label: string }[] = [
 const REQUEST_FILTERS: { key: RequestFilter; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "PENDING", label: "Pending" },
-  { key: "COMPLETED", label: "Completed" },
+  { key: "APPROVED", label: "Approved" },
   { key: "REJECTED", label: "Rejected" },
 ];
 
@@ -219,30 +216,20 @@ export default function ClientWalletPage() {
     e.preventDefault();
     setSubmitting(true);
     try {
-      let documentId: string | undefined;
-      if (proof) {
-        const formData = new FormData();
-        formData.append("ownerType", "WALLET_TOPUP_PROOF");
-        formData.append("file", proof);
-        const res = await trackedFetch(`${API_BASE_URL}/api/v1/documents`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${getToken()}` },
-          body: formData,
-        });
-        if (!res.ok) throw new ApiError("Could not upload the payment proof", res.status);
-        const doc = await res.json();
-        documentId = doc.id;
-      }
-      await apiFetch(`/api/v1/clients/${clientId}/wallet/topup`, {
+      if (!proof) throw new ApiError("Attach the proof of the transfer", 400);
+      const formData = new FormData();
+      formData.append("amount", form.amount);
+      formData.append("paymentMode", form.paymentMode);
+      formData.append("paymentReference", form.paymentReference.trim());
+      formData.append("proof", proof);
+      const res = await trackedFetch(`${API_BASE_URL}/api/v1/clients/${clientId}/wallet/topup`, {
         method: "POST",
-        body: {
-          amount: Number(form.amount),
-          paymentMode: form.paymentMode,
-          paymentReference: form.paymentReference,
-          documentId,
-          idempotencyKey: crypto.randomUUID(),
-        },
+        headers: { Authorization: `Bearer ${getToken()}` },
+        body: formData,
       });
+      if (!res.ok) {
+        throw new ApiError(await extractErrorMessage(res, "Top-up failed"), res.status);
+      }
       toast.success("Top-up submitted — waiting for Paytrix to accept it");
       closeModal();
       setTab("requests");
@@ -258,7 +245,7 @@ export default function ClientWalletPage() {
     const query = ledgerSearch.trim().toLowerCase();
     if (!query) return ledger;
     return ledger.filter((entry) => {
-      const category = CATEGORY_LABELS[entry.referenceType] ?? entry.referenceType;
+      const category = CATEGORY_LABELS[entry.category] ?? entry.category;
       return (
         category.toLowerCase().includes(query) ||
         (entry.description ?? "").toLowerCase().includes(query) ||
@@ -292,14 +279,14 @@ export default function ClientWalletPage() {
   const requestCounts: Record<RequestFilter, number> = {
     ALL: searchedRequests.length,
     PENDING: searchedRequests.filter((request) => request.status === "PENDING").length,
-    COMPLETED: searchedRequests.filter((request) => request.status === "COMPLETED").length,
+    APPROVED: searchedRequests.filter((request) => request.status === "APPROVED").length,
     REJECTED: searchedRequests.filter((request) => request.status === "REJECTED").length,
   };
   const visibleRequests = searchedRequests.filter(
     (request) => requestFilter === "ALL" || request.status === requestFilter,
   );
 
-  const canSubmit = Number(form.amount) > 0 && form.paymentReference.trim().length > 0;
+  const canSubmit = Number(form.amount) > 0 && form.paymentReference.trim().length > 0 && proof !== null;
   const requestedAmount = Number(form.amount);
 
   if (user?.role === "CLIENT_OPERATOR" || !ready) return null;
@@ -433,7 +420,7 @@ export default function ClientWalletPage() {
                             {credit ? "Credit" : "Debit"}
                           </span>
                         </TD>
-                        <TD>{CATEGORY_LABELS[entry.referenceType] ?? entry.referenceType}</TD>
+                        <TD>{CATEGORY_LABELS[entry.category] ?? entry.category}</TD>
                         <TD
                           className={cn(
                             "font-mono text-sm font-semibold",
@@ -568,7 +555,7 @@ export default function ClientWalletPage() {
               <dl className="grid grid-cols-2 gap-x-4 gap-y-4">
                 <InfoField
                   label="Category"
-                  value={CATEGORY_LABELS[selectedEntry.referenceType] ?? selectedEntry.referenceType}
+                  value={CATEGORY_LABELS[selectedEntry.category] ?? selectedEntry.category}
                 />
                 <InfoField label="Balance after" value={inr(selectedEntry.balanceAfter)} />
                 <InfoField label="Note" value={selectedEntry.description || "—"} />
@@ -584,8 +571,8 @@ export default function ClientWalletPage() {
         title="Top-up request"
         description="The wallet is credited only after Paytrix accepts this request."
         footer={
-          selectedRequest?.documentId ? (
-            <Button onClick={() => setProofId(selectedRequest.documentId as string)}>
+          selectedRequest?.hasProof ? (
+            <Button onClick={() => setProofId(`/api/v1/clients/${clientId}/wallet/topups/${selectedRequest.id}/proof`)}>
               View proof
             </Button>
           ) : undefined
@@ -606,8 +593,17 @@ export default function ClientWalletPage() {
                   label="Mode"
                   value={MODE_LABELS[selectedRequest.paymentMode] ?? selectedRequest.paymentMode}
                 />
-                <InfoField label="Reference" value={selectedRequest.paymentReference ?? "—"} />
-                <InfoField label="Proof" value={selectedRequest.documentId ? "Attached" : "None"} />
+                <InfoField label="UTR" value={selectedRequest.paymentReference ?? "—"} />
+                <InfoField label="Proof" value={selectedRequest.hasProof ? "Attached" : "None"} />
+                <InfoField label="Requested by" value={selectedRequest.createdBy ?? "—"} />
+                <InfoField
+                  label={selectedRequest.status === "REJECTED" ? "Rejected by" : "Approved by"}
+                  value={
+                    selectedRequest.approvedBy
+                      ? `${selectedRequest.approvedBy}${selectedRequest.approvedOn ? `, ${formatWhen(selectedRequest.approvedOn)}` : ""}`
+                      : "—"
+                  }
+                />
               </dl>
             </div>
           </div>
@@ -659,8 +655,9 @@ export default function ClientWalletPage() {
             ))}
           </SelectField>
           <Field
-            label="Payment reference"
+            label="UTR / transaction ID"
             required
+            maxLength={150}
             value={form.paymentReference}
             onChange={(e) => setForm({ ...form, paymentReference: e.target.value })}
             placeholder="UTR / transaction ID / receipt number"
@@ -669,10 +666,12 @@ export default function ClientWalletPage() {
             <span className="font-medium text-slate-700">Payment proof</span>
             <input
               type="file"
+              required
+              accept="application/pdf,image/png,image/jpeg,image/webp"
               onChange={(e) => setProof(e.target.files?.[0] ?? null)}
               className="min-h-11 rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-indigo-700"
             />
-            <span className="text-xs text-slate-400">Optional. A receipt or transfer screenshot.</span>
+            <span className="text-xs text-slate-400">Required. A PDF or image of the transfer, up to 5 MB.</span>
           </label>
           {Number.isFinite(requestedAmount) && requestedAmount > 0 && (
             <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800">
@@ -682,7 +681,7 @@ export default function ClientWalletPage() {
         </form>
       </Modal>
 
-      <ProofModal documentId={proofId} onClose={() => setProofId(null)} />
+      <ProofModal src={proofId} onClose={() => setProofId(null)} />
     </div>
   );
 }

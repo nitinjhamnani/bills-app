@@ -57,6 +57,7 @@ export function CreateBillModal({
   const [parametersLoading, setParametersLoading] = useState(false);
   const [parameterError, setParameterError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [mobileNumber, setMobileNumber] = useState("");
   const [creating, setCreating] = useState(false);
   const [branchId, setBranchId] = useState("");
   const needsBranch = branches != null && !fixedBranchId;
@@ -72,6 +73,7 @@ export function CreateBillModal({
     setParameters([]);
     setParameterError(null);
     setValues({});
+    setMobileNumber("");
     setBranchId(fixedBranchId ?? "");
     let cancelled = false;
     setOptionsLoading(true);
@@ -161,7 +163,8 @@ export function CreateBillModal({
     !parametersLoading &&
     parameterError == null &&
     parameters.length > 0 &&
-    parameters.every((parameter) => (values[parameter.name] ?? "").trim().length > 0);
+    parameters.every((parameter) => (values[parameter.name] ?? "").trim().length > 0) &&
+    /^[6-9][0-9]{9}$/.test(mobileNumber);
 
   function selectCategory(nextId: string) {
     setCategoryId(nextId);
@@ -204,6 +207,7 @@ export function CreateBillModal({
           ...((fixedBranchId || needsBranch) ? { branchId: fixedBranchId || branchId } : {}),
           categoryId,
           billerId,
+          mobileNumber,
           parameters: values,
         },
       });
@@ -234,7 +238,7 @@ export function CreateBillModal({
       open={open}
       onClose={onClose}
       title="Create a managed bill"
-      description="Choose a category, then the operator, and fill in the fields it asks for."
+      description="Choose a category, then the operator. Fill in the fields it asks for, and the mobile number sent with the fetch."
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={creating}>
@@ -334,6 +338,15 @@ export function CreateBillModal({
                     onChange={(e) => setValues((current) => ({ ...current, [parameter.name]: e.target.value }))}
                   />
                 ))}
+                <Field
+                  label="Mobile number"
+                  required
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={mobileNumber}
+                  hint="Sent with every bill fetch. Use a 10-digit mobile starting with 6, 7, 8, or 9."
+                  onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                />
               </div>
             )}
           </>

@@ -15,7 +15,9 @@ import {
   Settings,
   BarChart3,
   BadgePercent,
-  Receipt,
+  Banknote,
+  Percent,
+  ArrowLeftRight,
 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
@@ -31,8 +33,10 @@ const NAV: NavLink[] = [
   { href: "/paytrix/users", label: "Users", icon: Users },
   { href: "/paytrix/managed-bills", label: "Managed Bills", icon: FileText },
   { href: "/paytrix/my-payments", label: "My Payments", icon: Send },
-  { href: "/paytrix/settlements", label: "Settlements", icon: Receipt },
+  { href: "/paytrix/vendor-payments", label: "Vendor Payments", icon: Banknote },
+  { href: "/paytrix/vendor-commissions", label: "Vendor Commissions", icon: Percent },
   { href: "/paytrix/manage-wallets", label: "Manage Wallets", icon: Wallet },
+  { href: "/paytrix/transactions", label: "Transactions", icon: ArrowLeftRight },
   { href: "/paytrix/disputes", label: "Disputes", icon: AlertTriangle },
   { href: "/paytrix/support-tickets", label: "Support Tickets", icon: LifeBuoy },
   { href: "/paytrix/reports", label: "Reports", icon: BarChart3 },
@@ -59,8 +63,8 @@ function OrganisationShell({
         { href: "/paytrix/sales", label: "Dashboard", icon: LayoutDashboard, exact: true },
         { href: "/paytrix/sales/reports", label: "Reports", icon: BarChart3 },
       ]
-    : NAV.map((item) =>
-        item.href === "/paytrix/support-tickets" ? { ...item, badge: unread } : item,
+    : NAV.filter((item) => item.href !== "/paytrix/transactions" || user.role === "ORGANISATION_ADMIN").map(
+        (item) => (item.href === "/paytrix/support-tickets" ? { ...item, badge: unread } : item),
       );
 
   useEffect(() => {

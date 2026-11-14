@@ -11,10 +11,11 @@ import { API_BASE_URL } from "@/lib/workspace";
  * storage bucket is never opened directly.
  */
 export function ProofModal({
-  documentId,
+  src,
   onClose,
 }: {
-  documentId: string | null;
+  /** API path of the proof file, or null when closed. */
+  src: string | null;
   onClose: () => void;
 }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -22,7 +23,7 @@ export function ProofModal({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!documentId) return;
+    if (!src) return;
     let objectUrl: string | null = null;
     let cancelled = false;
     setUrl(null);
@@ -31,7 +32,7 @@ export function ProofModal({
 
     (async () => {
       try {
-        const res = await trackedFetch(`${API_BASE_URL}/api/v1/documents/${documentId}/file`, {
+        const res = await trackedFetch(`${API_BASE_URL}${src}`, {
           headers: { Authorization: `Bearer ${getToken()}` },
         });
         if (!res.ok) throw new Error();
@@ -49,13 +50,13 @@ export function ProofModal({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [documentId]);
+  }, [src]);
 
   const image = contentType.startsWith("image/");
   const pdf = contentType.includes("pdf");
 
   return (
-    <Modal open={documentId !== null} onClose={onClose} title="Payment proof" size="xl" raised>
+    <Modal open={src !== null} onClose={onClose} title="Payment proof" size="xl" raised>
       {error ? (
         <p className="text-sm text-red-600">{error}</p>
       ) : !url ? (

@@ -10,7 +10,8 @@ import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
-import type { BillPayment, OrgStatus } from "@/lib/types";
+import type { BillPayment, ClientType, OrgStatus } from "@/lib/types";
+import { vendorStageBadge, vendorStageOf } from "@/lib/vendor-stage";
 
 const FILTERS: { key: OrgStatus | "ALL"; label: string }[] = [
   { key: "ALL", label: "All" },
@@ -20,7 +21,156 @@ const FILTERS: { key: OrgStatus | "ALL"; label: string }[] = [
   { key: "PAID", label: "Paid" },
 ];
 
-export function BillsTab({ clientId }: { clientId: string }) {
+type VendorStage = "ASSIGNED" | "IN_PROGRESS" | "VENDOR_PAID" | "VERIFIED" | "REIMBURSED";
+
+const VENDOR_FILTERS: { key: VendorStage | "ALL" | "VERIFIED_GROUP"; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "ASSIGNED", label: "Assigned" },
+  { key: "IN_PROGRESS", label: "In progress" },
+  { key: "VENDOR_PAID", label: "Waiting for Paytrix" },
+  { key: "VERIFIED_GROUP", label: "Verified" },
+];
+
+function vendorStage(bill: BillPayment): string {
+  return vendorStageOf(bill);
+}
+
+function VendorBills({ clientId }: { clientId: string }) {
+  const toast = useToast();
+  const [payments, setPayments] = useState<BillPayment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<(typeof VENDOR_FILTERS)[number]["key"]>("ALL");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<BillPayment[]>(`/api/v1/paytrix/clients/${clientId}/assigned-bills`)
+      .then((rows) => {
+        if (!cancelled) setPayments(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) toast.error(err instanceof ApiError ? err.message : "Failed to load assigned bills");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
+
+  const visible = useMemo(() => {
+    if (filter === "ALL") return payments;
+    if (filter === "VERIFIED_GROUP") {
+      return payments.filter((bill) => {
+        const stage = vendorStage(bill);
+        return stage === "VERIFIED" || stage === "REIMBURSED";
+      });
+    }
+    return payments.filter((bill) => vendorStage(bill) === filter);
+  }, [payments, filter]);
+
+  const counts = useMemo(() => {
+    const next: Record<string, number> = { ALL: payments.length, VERIFIED_GROUP: 0 };
+    for (const bill of payments) {
+      const stage = vendorStage(bill);
+      if (stage === "VERIFIED" || stage === "REIMBURSED") next.VERIFIED_GROUP += 1;
+      next[stage] = (next[stage] ?? 0) + 1;
+    }
+    return next;
+  }, [payments]);
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="mb-4 flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {VENDOR_FILTERS.map((item) => {
+          const active = filter === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setFilter(item.key)}
+              className={cn(
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+                active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              {item.label}
+              <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold", active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500")}>
+                {counts[item.key] ?? 0}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <ListCard fitContent={false}>
+        {loading ? (
+          <TableSkeleton cols={5} />
+        ) : visible.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No assigned bills"
+            description="Bills appear here after a corporate pays and a rule assigns them to this vendor."
+          />
+        ) : (
+          <Table>
+            <THead columns={["", "Corporate", "Biller", "Consumer no.", "Amount", "Status"]} />
+            <TBody>
+              {visible.map((bill) => {
+                const expanded = expandedIds.has(bill.id);
+                const stage = vendorStageBadge(vendorStage(bill));
+                return (
+                  <Fragment key={bill.id}>
+                    <TR className="cursor-pointer" onClick={() => toggleExpand(bill.id)}>
+                      <TD onClick={(event) => event.stopPropagation()}>
+                        <button type="button" className="text-slate-400" onClick={() => toggleExpand(bill.id)}>
+                          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
+                      </TD>
+                      <TD className="font-medium text-slate-900">{bill.corporateName ?? "—"}</TD>
+                      <TD>
+                        {bill.billerName}
+                        <p className="text-[11px] font-normal text-slate-400">{bill.billServiceName}</p>
+                      </TD>
+                      <TD className="font-mono text-xs">{bill.customerBillAccountNumber}</TD>
+                      <TD className="font-semibold text-slate-900">₹{bill.amount.toLocaleString("en-IN")}</TD>
+                      <TD><StatusBadge status={stage.status} label={stage.label} /></TD>
+                    </TR>
+                    {expanded && (
+                      <TR className="hover:bg-transparent">
+                        <TD colSpan={6} className="whitespace-normal bg-slate-50/60 p-4">
+                          <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                            <div><dt className="text-slate-400">Due</dt><dd className="mt-1 font-medium text-slate-800">{bill.dueDate ?? "—"}</dd></div>
+                            <div><dt className="text-slate-400">Corporate paid</dt><dd className="mt-1 font-medium text-slate-800">{bill.clientPaidAt ? new Date(bill.clientPaidAt).toLocaleDateString("en-IN") : "—"}</dd></div>
+                            <div><dt className="text-slate-400">Paid to biller</dt><dd className="mt-1 font-medium text-slate-800">{bill.vendorMarkedPaidAt ? new Date(bill.vendorMarkedPaidAt).toLocaleDateString("en-IN") : "—"}</dd></div>
+                            <div><dt className="text-slate-400">Verified</dt><dd className="mt-1 font-medium text-slate-800">{bill.bbpsVerifiedAt ? new Date(bill.bbpsVerifiedAt).toLocaleDateString("en-IN") : "Not yet"}</dd></div>
+                            <div><dt className="text-slate-400">Transaction ref.</dt><dd className="mt-1 font-mono font-medium text-slate-800">{bill.vendorPaymentReference ?? "—"}</dd></div>
+                            <div><dt className="text-slate-400">BBPS ref.</dt><dd className="mt-1 font-mono font-medium text-slate-800">{bill.bbpsTransactionId ?? "—"}</dd></div>
+                          </dl>
+                        </TD>
+                      </TR>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </TBody>
+          </Table>
+        )}
+      </ListCard>
+    </div>
+  );
+}
+
+function CorporateBills({ clientId }: { clientId: string }) {
   const toast = useToast();
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -292,4 +442,9 @@ export function BillsTab({ clientId }: { clientId: string }) {
       </ListCard>
     </div>
   );
+}
+
+export function BillsTab({ clientId, clientType }: { clientId: string; clientType?: ClientType }) {
+  if (clientType === "VENDOR") return <VendorBills clientId={clientId} />;
+  return <CorporateBills clientId={clientId} />;
 }

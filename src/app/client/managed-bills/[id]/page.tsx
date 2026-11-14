@@ -73,7 +73,8 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
 
 function cycleBucket(payment: BillPayment): Exclude<CycleFilter, "ALL"> | "OTHER" {
   if (payment.billStatus === "FAILED") return "FAILED";
-  if (payment.billStatus === "DUE" || payment.billStatus === "PAID") return payment.billStatus;
+  if (payment.billStatus === "DUE") return "DUE";
+  if (payment.billStatus === "PAID") return "PAID";
   return "OTHER";
 }
 

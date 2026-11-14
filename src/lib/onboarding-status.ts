@@ -1,14 +1,14 @@
 /** While a client is still PENDING, the list shows the step they are on, not a generic pending state. */
 export function onboardingStatus(client: {
   status: string;
-  detailsSubmittedAt?: string | null;
+  detailsSubmitted?: boolean;
   kycStatus?: string;
   contractStatus?: string;
 }) {
   if (client.status !== "PENDING") {
     return { code: client.status, label: undefined as string | undefined };
   }
-  if (!client.detailsSubmittedAt) {
+  if (!client.detailsSubmitted) {
     return { code: "COMPANY_PENDING", label: "Company pending" };
   }
   if (client.kycStatus !== "COMPLETE") {

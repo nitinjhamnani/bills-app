@@ -107,7 +107,7 @@ export interface Client {
   createdAt: string;
   kycStatus?: "NOT_STARTED" | "PENDING" | "COMPLETE";
   contractStatus?: "NOT_STARTED" | "PENDING" | "SIGNED";
-  detailsSubmittedAt?: string | null;
+  detailsSubmitted?: boolean;
   salesUserId?: string | null;
   salesPersonName?: string | null;
   branchCount?: number;
@@ -222,9 +222,13 @@ export interface FeeConfig {
   enabled: boolean;
 }
 
-export type PaymentStatus = "PROCESSING" | "PENDING" | "PAID" | "FAILED";
-export type BillLifecycleStatus = "PROCESSING" | "DUE" | "PAID" | "FAILED";
-export type OrgStatus = "NA" | "PENDING" | "IN_PROCESS" | "PAID";
+/** A stored status. The known values stay for labels; any other value still type-checks and renders. */
+export type OpenStatus<T extends string> = T | (string & {});
+
+export type PaymentStatus = OpenStatus<"PROCESSING" | "PENDING" | "PAID" | "FAILED">;
+export type BillLifecycleStatus = OpenStatus<"PROCESSING" | "DUE" | "PAID" | "FAILED">;
+export type OrgStatus = OpenStatus<"NA" | "PENDING" | "IN_PROCESS" | "PAID">;
+export type VendorStage = OpenStatus<"ASSIGNED" | "IN_PROGRESS" | "VENDOR_PAID" | "VERIFIED" | "REIMBURSED">;
 
 export interface Biller {
   billerId: string;
@@ -310,7 +314,7 @@ export interface BillPayment {
   commissionAmount?: number | null;
   vendorMarkedPaidAt?: string | null;
   vendorPaymentReference?: string | null;
-  vendorStage?: "ASSIGNED" | "IN_PROGRESS" | "VENDOR_PAID" | "VERIFIED" | "REIMBURSED" | null;
+  vendorStage?: VendorStage | null;
   bbpsVerifiedAt?: string | null;
   bbpsCheckNote?: string | null;
   reimbursedAt?: string | null;
@@ -320,6 +324,40 @@ export interface BillPayment {
   canSettle?: boolean;
   branchId?: string | null;
   branchName?: string | null;
+  hasPaymentProof?: boolean;
+  corporateName?: string | null;
+}
+
+export interface CorpPayment {
+  id: string;
+  billFetchId: string;
+  billId: string;
+  billerName: string;
+  categoryName: string;
+  consumerNumber: string;
+  dueDate: string | null;
+  billCycle: string | null;
+  branchId: string | null;
+  branchName: string | null;
+  billAmount: number;
+  corpPaymentOn: string;
+  corpId: string;
+  corpName: string;
+  corpPaidUserId: string | null;
+  corpPaymentStatus: "PAID";
+  billAssignedTo: "ORG" | "VENDOR";
+  billAssignedToId: string;
+  billAssignedToName: string;
+  billAssignedToStatus: "PENDING" | "IN_PROGRESS";
+  billAssignedOn: string;
+  billPaidOn: string | null;
+  transactionReferenceNumber: string | null;
+  bbpsExternalReference: string | null;
+  paymentProof: string | null;
+  verifiedBy: string | null;
+  verifiedById: string | null;
+  verifiedOn: string | null;
+  isVerified: boolean;
 }
 
 export interface ClientAccount {
@@ -333,7 +371,7 @@ export interface ClientAccount {
   registrationNumber: string | null;
   registeredAddress: string | null;
   signingAuthority: string | null;
-  detailsSubmittedAt: string | null;
+  detailsSubmitted: boolean;
   kycStatus: "NOT_STARTED" | "PENDING" | "COMPLETE";
   contractStatus: "NOT_STARTED" | "PENDING" | "SIGNED";
 }
@@ -361,8 +399,9 @@ export interface BillLedgerEntry {
   entryType: "DEBIT" | "CREDIT";
   amount: number;
   balanceAfter: number;
-  referenceType: string;
+  category: string;
   description: string | null;
+  createdBy: string | null;
   createdAt: string;
 }
 
@@ -374,9 +413,9 @@ export interface LedgerEntryDto {
   entryType: "DEBIT" | "CREDIT";
   amount: number;
   balanceAfter: number;
-  referenceType: string;
-  referenceId: string | null;
+  category: string;
   description: string | null;
+  createdBy: string | null;
   createdAt: string;
 }
 
@@ -387,9 +426,12 @@ export interface WalletTopup {
   amount: number;
   paymentMode: PaymentMode;
   paymentReference: string | null;
-  documentId: string | null;
-  status: "PENDING" | "COMPLETED" | "REJECTED";
+  hasProof: boolean;
+  status: "PENDING" | "APPROVED" | "REJECTED";
   createdAt: string;
+  createdBy?: string | null;
+  approvedBy?: string | null;
+  approvedOn?: string | null;
 }
 
 /** Same as WalletTopup, plus which client it's for - only returned by Paytrix-wide pending list. */
@@ -549,7 +591,7 @@ export interface FundingRow {
   clientCode: string | null;
   amount: number;
   paymentMode: PaymentMode;
-  status: "PENDING" | "COMPLETED" | "REJECTED";
+  status: "PENDING" | "APPROVED" | "REJECTED";
   paymentReference: string | null;
   requestedBy: string | null;
   reviewedBy: string | null;

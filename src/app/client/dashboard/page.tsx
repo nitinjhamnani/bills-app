@@ -23,7 +23,8 @@ import { StatCardSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { OnboardingTracker, type CompanyDetails } from "@/components/OnboardingTracker";
-import type { ClientAccount, ClientAnalytics } from "@/lib/types";
+import type { BillPayment, ClientAccount, ClientAnalytics } from "@/lib/types";
+import { vendorStageBadge, vendorStageOf } from "@/lib/vendor-stage";
 
 function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
@@ -87,6 +88,97 @@ export default function ClientDashboard() {
   const user = getUser();
   if (user?.role === "BRANCH_USER") return <BranchHomeDashboard />;
   return <CorporateDashboard />;
+}
+
+function vendorStage(bill: BillPayment): string {
+  return vendorStageOf(bill);
+}
+
+function VendorDashboard({ userName, role }: { userName?: string; role?: string }) {
+  const router = useRouter();
+  const toast = useToast();
+  const [bills, setBills] = useState<BillPayment[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    apiFetch<BillPayment[]>("/api/v1/client/assigned-bills")
+      .then(setBills)
+      .catch((err) => toast.error(err instanceof ApiError ? err.message : "Failed to load assigned bills"))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const stages = {
+    ASSIGNED: bills.filter((bill) => vendorStage(bill) === "ASSIGNED"),
+    IN_PROGRESS: bills.filter((bill) => vendorStage(bill) === "IN_PROGRESS"),
+    VENDOR_PAID: bills.filter((bill) => vendorStage(bill) === "VENDOR_PAID"),
+    VERIFIED: bills.filter((bill) => vendorStage(bill) === "VERIFIED" || vendorStage(bill) === "REIMBURSED"),
+  };
+  const amount = (rows: BillPayment[]) => rows.reduce((total, bill) => total + bill.amount, 0);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={userName ? `Welcome back, ${userName}` : "Dashboard"}
+        description="Bills a corporate pays are assigned to you. Follow them on My Payments until Paytrix verifies them. Verified bills also appear under Transactions."
+        actions={role ? <StatusBadge status={role} /> : undefined}
+      />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
+        ) : (
+          <>
+            <BillStatCard label="Assigned" count={stages.ASSIGNED.length} amount={amount(stages.ASSIGNED)} icon={FileText} />
+            <BillStatCard label="In progress" count={stages.IN_PROGRESS.length} amount={amount(stages.IN_PROGRESS)} icon={Clock} tone="warning" />
+            <BillStatCard label="Waiting for Paytrix" count={stages.VENDOR_PAID.length} amount={amount(stages.VENDOR_PAID)} icon={Send} />
+            <BillStatCard label="Verified" count={stages.VERIFIED.length} amount={amount(stages.VERIFIED)} icon={PackageCheck} tone="success" />
+          </>
+        )}
+      </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Assigned bills</h2>
+            <p className="mt-0.5 text-xs text-slate-500">Every bill currently assigned to this account.</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => router.push("/client/assigned-bills")}>
+            My Payments
+          </Button>
+        </div>
+        {loading ? (
+          <div className="p-4"><Skeleton className="h-16 w-full" /></div>
+        ) : bills.length === 0 ? (
+          <p className="px-4 py-8 text-center text-sm text-slate-500">
+            Bills appear here after a corporate pays and a rule matches this account.
+          </p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {bills.map((bill) => {
+              const stage = vendorStageBadge(vendorStage(bill));
+              return (
+                <li key={bill.id}>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/client/assigned-bills")}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-slate-900">{bill.billerName}</span>
+                      <span className="mt-0.5 block truncate text-xs text-slate-500">
+                        {bill.corporateName ?? "Corporate"} · {bill.customerBillAccountNumber}
+                      </span>
+                    </span>
+                    <span className="font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</span>
+                    <StatusBadge status={stage.status} label={stage.label} />
+                    <ChevronRight size={16} className="shrink-0 text-slate-300" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
 }
 
 function CorporateDashboard() {
@@ -162,7 +254,7 @@ function CorporateDashboard() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <OnboardingTracker
             kind={account.corporateKind}
-            companyDone={account.detailsSubmittedAt != null}
+            companyDone={account.detailsSubmitted}
             kycDone={account.kycStatus === "COMPLETE"}
             contractDone={account.contractStatus === "SIGNED"}
             canAct={canAct}
@@ -174,6 +266,10 @@ function CorporateDashboard() {
         </div>
       </div>
     );
+  }
+
+  if (!loading && vendor) {
+    return <VendorDashboard userName={user?.displayName} role={user?.role} />;
   }
 
   return (
@@ -249,7 +345,7 @@ function CorporateDashboard() {
             </span>
           </div>
           {!vendor && (
-            <Button icon={<Send size={16} />} onClick={() => router.push("/client/my-payments")}>
+            <Button icon={<Send size={16} />} onClick={() => router.push("/client/my-dues")}>
               {pending > 0 ? "Pay bills" : "My Payments"}
             </Button>
           )}

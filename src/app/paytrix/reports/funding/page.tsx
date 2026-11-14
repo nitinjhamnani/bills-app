@@ -77,7 +77,7 @@ export default function OrganisationFundingReportPage() {
   }, [range.generated, range.applied.from, range.applied.to, status, appliedClientId]);
 
   const completed = useMemo(
-    () => rows.filter((r) => r.status === "COMPLETED").reduce((sum, r) => sum + r.amount, 0),
+    () => rows.filter((r) => r.status === "APPROVED").reduce((sum, r) => sum + r.amount, 0),
     [rows],
   );
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, r) => sum + r.amount, 0), [adjustments]);
@@ -153,7 +153,7 @@ export default function OrganisationFundingReportPage() {
           options={[
             { key: "ALL", label: "All" },
             { key: "PENDING", label: "Pending" },
-            { key: "COMPLETED", label: "Completed" },
+            { key: "APPROVED", label: "Approved" },
             { key: "REJECTED", label: "Rejected" },
           ]}
         />
@@ -173,7 +173,7 @@ export default function OrganisationFundingReportPage() {
         fillHeight={false}
         summary={[
           { label: "Requests", value: String(rows.length) },
-          { label: "Completed top-ups", value: formatInr(completed), tone: "success" },
+          { label: "Approved top-ups", value: formatInr(completed), tone: "success" },
         ]}
       />
       <ReportTable

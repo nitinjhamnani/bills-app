@@ -62,8 +62,11 @@ function clientInitials(name: string) {
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "C";
 }
 
-function formatOnboarded(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", {
+function formatOnboarded(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",

@@ -30,14 +30,17 @@ interface Branch {
   id: string;
   name: string;
   address: string | null;
+  state: string | null;
+  location: string | null;
   code: string | null;
-  comment: string | null;
   users: BranchUser[];
 }
 
 const emptyForm = {
   name: "",
   address: "",
+  state: "",
+  location: "",
   code: "",
   userName: "",
   phoneNumber: "",
@@ -188,6 +191,8 @@ export default function BranchesPage() {
         body: {
           name: form.name,
           address: form.address,
+          state: form.state,
+          location: form.location,
           code: form.code,
           ...(selectedIds.length > 0 ? { userIds: selectedIds } : {}),
           ...(addingNew ? { userName: form.userName, phoneNumber: form.phoneNumber } : {}),
@@ -314,6 +319,18 @@ export default function BranchesPage() {
               placeholder="Link Road, Andheri West"
               value={form.address}
               onChange={(e) => setField("address", e.target.value)}
+            />
+            <Field
+              label="State"
+              placeholder="Maharashtra"
+              value={form.state}
+              onChange={(e) => setField("state", e.target.value)}
+            />
+            <Field
+              label="Location"
+              placeholder="Andheri West"
+              value={form.location}
+              onChange={(e) => setField("location", e.target.value)}
             />
             <Field
               label="Branch code"

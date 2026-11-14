@@ -7,6 +7,7 @@ import {
   Download,
   FileText,
   PackageCheck,
+  ShieldCheck,
   SlidersHorizontal,
   Upload,
   X,
@@ -158,11 +159,20 @@ export default function OrganisationMyPaymentsPage() {
 
   const selectedPending = useMemo(
     () =>
-      Array.from(selectedIds).filter(
-        (id) => payments.find((p) => p.id === id)?.orgStatus === "PENDING",
-      ).length,
+      Array.from(selectedIds).filter((id) => {
+        const payment = payments.find((p) => p.id === id);
+        return payment?.orgStatus === "PENDING" && !payment.assignedVendorClientId;
+      }).length,
     [selectedIds, payments],
   );
+  const selectedToVerify = useMemo(
+    () => Array.from(selectedIds).filter((id) => payments.find((p) => p.id === id)?.vendorStage === "VENDOR_PAID"),
+    [selectedIds, payments],
+  );
+  const [verifyIds, setVerifyIds] = useState<string[] | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [checkingId, setCheckingId] = useState<string | null>(null);
+  const [checkNote, setCheckNote] = useState<string | null>(null);
 
   const allVisibleSelected =
     visible.length > 0 && visible.every((p) => selectedIds.has(p.id));
@@ -284,6 +294,53 @@ export default function OrganisationMyPaymentsPage() {
     await load();
   }
 
+  async function verifyBills(ids: string[]) {
+    setVerifying(true);
+    try {
+      const results = await apiFetch<Array<{ billPaymentId: string; verified: boolean; note: string }>>(
+        "/api/v1/paytrix/settlements/verify",
+        { method: "POST", body: { billPaymentIds: ids } },
+      );
+      const ok = results.filter((result) => result.verified).length;
+      if (ok === results.length) toast.success(ok === 1 ? "Bill verified" : `Verified ${ok} bills`);
+      else toast.error(`Verified ${ok} of ${results.length}. ${results.find((result) => !result.verified)?.note ?? ""}`);
+      setVerifyIds(null);
+      setCheckNote(null);
+      setSelectedIds(new Set());
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  async function runBbpsCheck(id: string) {
+    setCheckingId(id);
+    try {
+      const result = await apiFetch<{ summary: string }>(`/api/v1/paytrix/settlements/${id}/bbps-check`, { method: "POST" });
+      setCheckNote(result.summary);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "The BBPS check failed");
+    } finally {
+      setCheckingId(null);
+    }
+  }
+
+  async function openProof(id: string) {
+    try {
+      const response = await trackedFetch(`${API_BASE_URL}/api/v1/paytrix/settlements/${id}/proof`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      if (!response.ok) throw new Error(await extractErrorMessage(response, "Could not open the proof"));
+      const url = URL.createObjectURL(await response.blob());
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not open the proof");
+    }
+  }
+
   async function exportSelected() {
     if (selectedIds.size === 0) return;
     setExporting(true);
@@ -353,7 +410,7 @@ export default function OrganisationMyPaymentsPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="My Payments"
-        description="Bills the client has paid. Pick a bill up, then record how you settled it with the biller."
+        description="Bills the client has paid that are not finished yet, whether Paytrix holds them or a vendor does. Verify a vendor payment here."
         actions={
           <>
             <Button
@@ -477,6 +534,11 @@ export default function OrganisationMyPaymentsPage() {
                 Pick up {selectedPending > 0 ? selectedPending : ""}
               </Button>
               )}
+              {(getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "CHECKER") && selectedToVerify.length > 0 && (
+                <Button size="sm" icon={<ShieldCheck size={14} />} onClick={() => { setCheckNote(null); setVerifyIds(selectedToVerify); }}>
+                  Verify {selectedToVerify.length}
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
@@ -558,9 +620,7 @@ export default function OrganisationMyPaymentsPage() {
                                     {p.assignedVendorName}
                                     {p.commissionPercent != null
                                       ? ` · ${p.commissionPercent}%${p.orgStatus === "PENDING" ? " current" : ""}`
-                                      : p.orgStatus === "PENDING"
-                                        ? " · waiting for a live rate"
-                                        : ""}
+                                      : ""}
                                   </p>
                                 )}
                               </div>
@@ -572,6 +632,9 @@ export default function OrganisationMyPaymentsPage() {
                           <TD className="font-mono text-sm font-semibold text-slate-900">{inr(p.amount)}</TD>
                           <TD>
                             <StatusBadge status={p.awaitingChecker ? "AWAITING_CHECKER" : p.orgStatus} />
+                            {stageLabel(p.vendorStage) && (
+                              <p className="mt-1 text-[11px] font-medium text-indigo-700">{stageLabel(p.vendorStage)}</p>
+                            )}
                           </TD>
                           <TD className="text-slate-500">{formatWhen(p.clientPaidAt)}</TD>
                           <TD onClick={(e) => e.stopPropagation()}>
@@ -580,6 +643,7 @@ export default function OrganisationMyPaymentsPage() {
                               loading={pickingUpId === p.id}
                               onPickUp={() => pickUp(p.id)}
                               onSettle={() => openSettle(p)}
+                              onVerify={() => { setCheckNote(null); setVerifyIds([p.id]); }}
                             />
                           </TD>
                         </TR>
@@ -642,9 +706,7 @@ export default function OrganisationMyPaymentsPage() {
                                     {p.assignedVendorName}
                                     {p.commissionPercent != null
                                       ? ` · ${p.commissionPercent}%${p.orgStatus === "PENDING" ? " current" : ""}`
-                                      : p.orgStatus === "PENDING"
-                                        ? " · waiting for a live rate"
-                                        : ""}
+                                      : ""}
                                   </p>
                                 )}
                               </div>
@@ -654,6 +716,9 @@ export default function OrganisationMyPaymentsPage() {
                             </div>
                             <div className="mt-3">
                               <StatusBadge status={p.awaitingChecker ? "AWAITING_CHECKER" : p.orgStatus} />
+                            {stageLabel(p.vendorStage) && (
+                              <p className="mt-1 text-[11px] font-medium text-indigo-700">{stageLabel(p.vendorStage)}</p>
+                            )}
                             </div>
                             <p className="mt-2 text-xs text-slate-500">
                               Client paid {formatWhen(p.clientPaidAt)}
@@ -675,6 +740,7 @@ export default function OrganisationMyPaymentsPage() {
                           loading={pickingUpId === p.id}
                           onPickUp={() => pickUp(p.id)}
                           onSettle={() => openSettle(p)}
+                          onVerify={() => { setCheckNote(null); setVerifyIds([p.id]); }}
                           fullWidth
                         />
                       </div>
@@ -686,6 +752,34 @@ export default function OrganisationMyPaymentsPage() {
           </>
         )}
       </ListCard>
+
+      <Modal
+        open={verifyIds != null}
+        onClose={verifying ? () => undefined : () => setVerifyIds(null)}
+        title={verifyIds?.length === 1 ? "Verify this payment" : `Verify ${verifyIds?.length ?? 0} payments`}
+        description="The vendor marked these bills paid. Verifying records what Paytrix owes the vendor."
+        footer={
+          <>
+            <Button variant="outline" disabled={verifying} onClick={() => setVerifyIds(null)}>Cancel</Button>
+            <Button loading={verifying} onClick={() => verifyIds && verifyBills(verifyIds)}>Verify</Button>
+          </>
+        }
+      >
+        {verifyIds?.length === 1 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" disabled={!payments.find((p) => p.id === verifyIds[0])?.hasPaymentProof} onClick={() => openProof(verifyIds[0])}>
+              {payments.find((p) => p.id === verifyIds[0])?.hasPaymentProof ? "View proof" : "No proof attached"}
+            </Button>
+            <Button size="sm" variant="outline" loading={checkingId === verifyIds[0]} onClick={() => runBbpsCheck(verifyIds[0])}>
+              Check with BBPS
+            </Button>
+          </div>
+        )}
+        {checkNote && <p className="text-sm text-slate-700">{checkNote}</p>}
+        <p className="text-sm text-slate-600">
+          {verifyIds?.length === 1 ? "Confirm this vendor payment." : "Each selected bill must be one a vendor has marked paid."}
+        </p>
+      </Modal>
 
       <Modal
         open={resultsModalOpen}
@@ -892,26 +986,43 @@ export default function OrganisationMyPaymentsPage() {
   );
 }
 
+function stageLabel(stage: BillPayment["vendorStage"]) {
+  if (stage === "ASSIGNED") return "Waiting on the vendor";
+  if (stage === "IN_PROGRESS") return "Vendor is paying";
+  if (stage === "VENDOR_PAID") return "Needs verification";
+  return null;
+}
+
 function RowAction({
   payment,
   loading,
   onPickUp,
   onSettle,
+  onVerify,
   fullWidth,
 }: {
   payment: BillPayment;
   loading: boolean;
   onPickUp: () => void;
   onSettle: () => void;
+  onVerify: () => void;
   fullWidth?: boolean;
 }) {
   const role = getUser()?.role;
   const canPickUp = role === "ORGANISATION_ADMIN" || role === "MAKER";
 
+  const canVerify = role === "ORGANISATION_ADMIN" || role === "CHECKER";
+  if (payment.vendorStage === "VENDOR_PAID" && canVerify) {
+    return (
+      <Button size="sm" className={fullWidth ? "w-full" : undefined} icon={<ShieldCheck size={14} />} onClick={onVerify}>
+        Verify
+      </Button>
+    );
+  }
   if (payment.assignedVendorClientId) {
     return (
-      <span className={fullWidth ? "block text-center text-xs font-medium text-indigo-700" : "text-xs font-medium text-indigo-700"}>
-        Handled in Settlements
+      <span className={fullWidth ? "block text-center text-xs font-medium text-slate-500" : "text-xs font-medium text-slate-500"}>
+        {stageLabel(payment.vendorStage) ?? "With vendor"}
       </span>
     );
   }
@@ -987,9 +1098,7 @@ function PaymentDetail({ payment }: { payment: BillPayment }) {
             value={
               payment.commissionPercent != null
                 ? `${payment.commissionPercent}%${payment.commissionAmount != null ? ` (${inr(payment.commissionAmount)})` : ""}${payment.orgStatus === "PENDING" ? ", current rate" : ""}`
-                : payment.orgStatus === "PENDING" && payment.assignedVendorName
-                  ? "Waiting for a live rate"
-                  : "—"
+                : "—"
             }
           />
           <DetailField label="Vendor reference" value={payment.vendorPaymentReference ?? "—"} mono />

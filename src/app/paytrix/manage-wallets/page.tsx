@@ -35,11 +35,8 @@ const LEDGER_FILTERS: { key: LedgerFilter; label: string }[] = [
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
-  TOPUP: "Top-up",
-  BILL_PAYMENT: "Bill payment",
-  REFUND: "Refund",
-  FEE: "Fee",
-  ADJUSTMENT: "Adjustment",
+  RECHARGE: "Recharge",
+  ELECTRICITY: "Electricity",
 };
 
 const MODE_LABELS: Record<string, string> = {
@@ -230,7 +227,7 @@ export default function ManageWalletsPage() {
     return ledger.filter((entry) => {
       if (ledgerFilter !== "ALL" && entry.entryType !== ledgerFilter) return false;
       if (!query) return true;
-      const category = CATEGORY_LABELS[entry.referenceType] ?? entry.referenceType;
+      const category = CATEGORY_LABELS[entry.category] ?? entry.category;
       return (
         category.toLowerCase().includes(query) ||
         (entry.description ?? "").toLowerCase().includes(query)
@@ -344,11 +341,11 @@ export default function ManageWalletsPage() {
                         <span className="font-mono text-xs text-slate-600">
                           {item.paymentReference ?? "—"}
                         </span>
-                        {item.documentId && (
+                        {item.hasProof && (
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setProofId(item.documentId as string)}
+                            onClick={() => setProofId(`/api/v1/clients/${item.clientId}/wallet/topups/${item.id}/proof`)}
                           >
                             View proof
                           </Button>
@@ -572,7 +569,7 @@ export default function ManageWalletsPage() {
                                 {credit ? "Credit" : "Debit"}
                               </span>
                             </TD>
-                            <TD>{CATEGORY_LABELS[entry.referenceType] ?? entry.referenceType}</TD>
+                            <TD>{CATEGORY_LABELS[entry.category] ?? entry.category}</TD>
                             <TD
                               className={cn(
                                 "font-mono text-sm font-semibold",
@@ -659,7 +656,7 @@ export default function ManageWalletsPage() {
           </form>
         )}
       </Modal>
-      <ProofModal documentId={proofId} onClose={() => setProofId(null)} />
+      <ProofModal src={proofId} onClose={() => setProofId(null)} />
     </div>
   );
 }

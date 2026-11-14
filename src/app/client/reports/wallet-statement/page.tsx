@@ -54,7 +54,7 @@ export default function ClientWalletStatementReportPage() {
       ),
       exportValue: (e) => e.entryType,
     },
-    { key: "category", label: "Category", render: (e) => <StatusBadge status={e.referenceType} />, exportValue: (e) => e.referenceType },
+    { key: "category", label: "Category", render: (e) => <StatusBadge status={e.category} />, exportValue: (e) => e.category },
     { key: "amount", label: "Amount", render: (e) => formatInr(e.amount), exportValue: (e) => e.amount },
     { key: "balance", label: "Balance after", render: (e) => formatInr(e.balanceAfter), exportValue: (e) => e.balanceAfter },
     { key: "description", label: "Description", render: (e) => e.description ?? "—", exportValue: (e) => e.description ?? "" },
@@ -90,7 +90,7 @@ export default function ClientWalletStatementReportPage() {
         emptyIcon={Receipt}
         emptyTitle={!range.generated ? "Nothing to show yet" : "No activity in these dates"}
         emptyDescription={!range.generated ? "Use Choose dates at the top to pick a period." : "Try a wider date range."}
-        rowKey={(e, i) => `${e.createdAt}-${e.referenceType}-${i}`}
+        rowKey={(e, i) => `${e.createdAt}-${e.category}-${i}`}
       />
     </div>
   );

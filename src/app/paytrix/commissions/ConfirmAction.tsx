@@ -2,19 +2,17 @@
 
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { formatRange } from "./format";
+import { formatPercent, formatRange, type Commission } from "./format";
 
 export type ActionDetail = { label: string; value: string };
 
-export function ruleFacts(rule: {
-  categoryName: string;
-  providerName: string;
-  range: { minAmount: number; maxAmount: number | null };
-}): ActionDetail[] {
+export function commissionFacts(commission: Commission): ActionDetail[] {
   return [
-    { label: "Category", value: rule.categoryName },
-    { label: "Provider", value: rule.providerName },
-    { label: "Amount", value: formatRange(rule.range.minAmount, rule.range.maxAmount) },
+    { label: "Category", value: commission.categoryName },
+    { label: "Operator", value: commission.operatorName },
+    { label: "Vendor", value: commission.vendorName },
+    { label: "Amount", value: formatRange(commission.minRange, commission.maxRange) },
+    { label: "Commission", value: formatPercent(commission.commission) },
   ];
 }
 

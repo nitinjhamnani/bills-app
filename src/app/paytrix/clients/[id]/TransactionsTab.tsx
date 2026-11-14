@@ -18,14 +18,11 @@ import type { LedgerEntryDto } from "@/lib/types";
 type EntryTypeFilter = "ALL" | "DEBIT" | "CREDIT";
 type SortKey = "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
 
-const CATEGORIES = ["TOPUP", "BILL_PAYMENT", "REFUND", "FEE", "ADJUSTMENT"] as const;
+const CATEGORIES = ["RECHARGE", "ELECTRICITY"] as const;
 
 const CATEGORY_LABELS: Record<string, string> = {
-  TOPUP: "Top-up",
-  BILL_PAYMENT: "Bill payment",
-  REFUND: "Refund",
-  FEE: "Fee",
-  ADJUSTMENT: "Adjustment",
+  RECHARGE: "Recharge",
+  ELECTRICITY: "Electricity",
 };
 
 const SORT_LABELS: Record<SortKey, string> = {
@@ -86,7 +83,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
     if (entryType !== "ALL")
       result = result.filter((e) => e.entryType === entryType);
     if (category !== "ALL")
-      result = result.filter((e) => e.referenceType === category);
+      result = result.filter((e) => e.category === category);
     if (dateFrom) {
       const from = new Date(dateFrom).getTime();
       result = result.filter((e) => new Date(e.createdAt).getTime() >= from);
@@ -153,7 +150,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
     return visible.map((e) => [
       new Date(e.createdAt).toLocaleString(),
       e.entryType,
-      CATEGORY_LABELS[e.referenceType] ?? e.referenceType,
+      CATEGORY_LABELS[e.category] ?? e.category,
       e.amount,
       e.balanceAfter,
       e.description ?? "",
@@ -305,7 +302,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
                     {e.entryType}
                   </TD>
                   <TD>
-                    <StatusBadge status={e.referenceType} />
+                    <StatusBadge status={e.category} />
                   </TD>
                   <TD>₹{e.amount.toLocaleString("en-IN")}</TD>
                   <TD>₹{e.balanceAfter.toLocaleString("en-IN")}</TD>

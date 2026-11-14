@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
 import { ReasonModal } from "@/components/ui/ReasonModal";
 import { useToast } from "@/components/ui/Toast";
-import type { BillLedgerEntry, BillPayment } from "@/lib/types";
+import type { BillPayment } from "@/lib/types";
 
 export default function OrganisationMyPaymentDetailsPage() {
   const params = useParams<{ id: string }>();
@@ -22,8 +22,6 @@ export default function OrganisationMyPaymentDetailsPage() {
 
   const [payment, setPayment] = useState<BillPayment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [transactions, setTransactions] = useState<BillLedgerEntry[]>([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
   const [markFailedOpen, setMarkFailedOpen] = useState(false);
@@ -42,25 +40,9 @@ export default function OrganisationMyPaymentDetailsPage() {
     }
   }
 
-  async function loadTransactions() {
-    setTransactionsLoading(true);
-    try {
-      setTransactions(
-        await apiFetch<BillLedgerEntry[]>(
-          `/api/v1/paytrix/my-payments/${billPaymentId}/transactions`,
-        ),
-      );
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load transactions");
-    } finally {
-      setTransactionsLoading(false);
-    }
-  }
-
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-    loadTransactions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billPaymentId]);
 
@@ -160,8 +142,6 @@ export default function OrganisationMyPaymentDetailsPage() {
       {payment && (
         <BillDetailsView
           payment={payment}
-          transactions={transactions}
-          transactionsLoading={transactionsLoading}
         />
       )}
 
