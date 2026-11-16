@@ -8,6 +8,7 @@ import {
   FileText,
   PackageCheck,
   ShieldCheck,
+  UserPlus,
   SlidersHorizontal,
   Upload,
   X,
@@ -33,6 +34,7 @@ const QUEUE: { key: OrgStatus | "ALL"; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "PENDING", label: "Awaiting pick-up" },
   { key: "IN_PROCESS", label: "In process" },
+  { key: "PAID", label: "Paid" },
 ];
 
 function formatWhen(iso: string | null) {
@@ -47,6 +49,28 @@ function formatWhen(iso: string | null) {
 function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
 }
+
+type AssignmentPlan = {
+  billPaymentId: string;
+  billerName: string;
+  consumerNumber: string;
+  amount: number;
+  corporateName: string;
+  willAssign: boolean;
+  vendorName: string | null;
+  commissionPercent: number | null;
+  reason: string | null;
+};
+
+function commissionLabel(percent: number) {
+  return `${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 }).format(percent)}%`;
+}
+
+type BillCheck = {
+  summary: string;
+  paid: boolean;
+  verified: boolean;
+};
 
 export default function OrganisationMyPaymentsPage() {
   const toast = useToast();
@@ -80,8 +104,8 @@ export default function OrganisationMyPaymentsPage() {
   const [billType, setBillType] = useState("");
   const [failReason, setFailReason] = useState("");
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       setPayments(await apiFetch<BillPayment[]>("/api/v1/paytrix/my-payments"));
     } catch (err) {
@@ -89,7 +113,7 @@ export default function OrganisationMyPaymentsPage() {
         err instanceof ApiError ? err.message : "Failed to load payments",
       );
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -170,9 +194,14 @@ export default function OrganisationMyPaymentsPage() {
     [selectedIds, payments],
   );
   const [verifyIds, setVerifyIds] = useState<string[] | null>(null);
+  const [manualIds, setManualIds] = useState<Set<string>>(new Set());
+  const [bbpsById, setBbpsById] = useState<Record<string, BillCheck>>({});
+  const [checkingBbps, setCheckingBbps] = useState(false);
+  const [previewingAssign, setPreviewingAssign] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [assignLines, setAssignLines] = useState<AssignmentPlan[] | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [checkingId, setCheckingId] = useState<string | null>(null);
-  const [checkNote, setCheckNote] = useState<string | null>(null);
 
   const allVisibleSelected =
     visible.length > 0 && visible.every((p) => selectedIds.has(p.id));
@@ -294,6 +323,144 @@ export default function OrganisationMyPaymentsPage() {
     await load();
   }
 
+  async function openAssign() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setPreviewingAssign(true);
+    try {
+      setAssignLines(await apiFetch<AssignmentPlan[]>("/api/v1/paytrix/my-payments/assign-preview", {
+        method: "POST",
+        body: { billPaymentIds: ids },
+      }));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not check the commission rules");
+    } finally {
+      setPreviewingAssign(false);
+    }
+  }
+
+  async function confirmAssign() {
+    if (!assignLines) return;
+    setAssigning(true);
+    try {
+      const result = await apiFetch<AssignmentPlan[]>("/api/v1/paytrix/my-payments/assign", {
+        method: "POST",
+        body: { billPaymentIds: assignLines.map((line) => line.billPaymentId) },
+      });
+      const planned = assignLines.filter((line) => line.willAssign).length;
+      const assigned = result.filter((line) => line.willAssign).length;
+      if (assigned > 0 && assigned === planned) {
+        toast.success(assigned === 1 ? "Bill assigned" : `Assigned ${assigned} bills`);
+        setAssignLines(null);
+        setSelectedIds(new Set());
+      } else if (assigned > 0) {
+        toast.error(`Assigned ${assigned} of ${planned}. The rest no longer match a commission rule.`);
+        setAssignLines(result);
+        setSelectedIds(new Set());
+      } else {
+        toast.error("No selected bill matches a commission rule");
+        setAssignLines(result);
+      }
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Assignment failed");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  function openVerify(ids: string[]) {
+    setBbpsById({});
+    setManualIds(new Set(ids));
+    setVerifyIds(ids);
+  }
+
+  function closeVerify() {
+    if (verifying || checkingBbps || checkingId) return;
+    setVerifyIds(null);
+    setManualIds(new Set());
+    setBbpsById({});
+  }
+
+  function toggleManual(id: string) {
+    setManualIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function checkSelectedWithBbps() {
+    if (!verifyIds || verifyIds.length === 0) return;
+    setCheckingBbps(true);
+    let verifiedCount = 0;
+    try {
+      for (const id of verifyIds) {
+        if (bbpsById[id]?.verified) continue;
+        try {
+          const result = await apiFetch<{ zeroPending: boolean; summary: string }>(
+            `/api/v1/paytrix/settlements/${id}/bbps-check`,
+            { method: "POST" },
+          );
+          if (result.zeroPending) {
+            const verified = await apiFetch<Array<{ verified: boolean; note: string }>>(
+              "/api/v1/paytrix/settlements/verify",
+              { method: "POST", body: { billPaymentIds: [id] } },
+            );
+            const ok = verified[0]?.verified === true;
+            setBbpsById((prev) => ({
+              ...prev,
+              [id]: {
+                paid: true,
+                verified: ok,
+                summary: ok ? "Verified. The provider shows this bill as paid." : (verified[0]?.note || result.summary),
+              },
+            }));
+            if (ok) {
+              verifiedCount++;
+              setManualIds((prev) => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+              });
+            }
+          } else {
+            setBbpsById((prev) => ({
+              ...prev,
+              [id]: { paid: false, verified: false, summary: result.summary },
+            }));
+            setManualIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          }
+        } catch (err) {
+          setBbpsById((prev) => ({
+            ...prev,
+            [id]: {
+              paid: false,
+              verified: false,
+              summary: err instanceof ApiError ? err.message : "The BBPS check failed",
+            },
+          }));
+          setManualIds((prev) => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }
+      }
+      if (verifiedCount > 0) {
+        toast.success(verifiedCount === 1 ? "1 bill verified from BBPS" : `${verifiedCount} bills verified from BBPS`);
+        await load(true);
+      }
+    } finally {
+      setCheckingBbps(false);
+    }
+  }
+
   async function verifyBills(ids: string[]) {
     setVerifying(true);
     try {
@@ -305,7 +472,8 @@ export default function OrganisationMyPaymentsPage() {
       if (ok === results.length) toast.success(ok === 1 ? "Bill verified" : `Verified ${ok} bills`);
       else toast.error(`Verified ${ok} of ${results.length}. ${results.find((result) => !result.verified)?.note ?? ""}`);
       setVerifyIds(null);
-      setCheckNote(null);
+      setManualIds(new Set());
+      setBbpsById({});
       setSelectedIds(new Set());
       await load();
     } catch (err) {
@@ -318,10 +486,43 @@ export default function OrganisationMyPaymentsPage() {
   async function runBbpsCheck(id: string) {
     setCheckingId(id);
     try {
-      const result = await apiFetch<{ summary: string }>(`/api/v1/paytrix/settlements/${id}/bbps-check`, { method: "POST" });
-      setCheckNote(result.summary);
+      const result = await apiFetch<{ zeroPending: boolean; summary: string }>(
+        `/api/v1/paytrix/settlements/${id}/bbps-check`,
+        { method: "POST" },
+      );
+      if (result.zeroPending) {
+        const verified = await apiFetch<Array<{ verified: boolean; note: string }>>(
+          "/api/v1/paytrix/settlements/verify",
+          { method: "POST", body: { billPaymentIds: [id] } },
+        );
+        if (verified[0]?.verified) {
+          toast.success("Bill verified");
+          setVerifyIds(null);
+          setManualIds(new Set());
+          setBbpsById({});
+          setSelectedIds(new Set());
+          await load();
+          return;
+        }
+        setBbpsById((prev) => ({
+          ...prev,
+          [id]: { paid: true, verified: false, summary: verified[0]?.note || result.summary },
+        }));
+        return;
+      }
+      setBbpsById((prev) => ({
+        ...prev,
+        [id]: { paid: false, verified: false, summary: result.summary },
+      }));
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "The BBPS check failed");
+      setBbpsById((prev) => ({
+        ...prev,
+        [id]: {
+          paid: false,
+          verified: false,
+          summary: err instanceof ApiError ? err.message : "The BBPS check failed",
+        },
+      }));
     } finally {
       setCheckingId(null);
     }
@@ -406,11 +607,15 @@ export default function OrganisationMyPaymentsPage() {
   const categoryLabel = categoryOptions.find(([code]) => code === billerCategory)?.[1];
   const clientLabel = clients.find((client) => client.id === selectedClientId)?.clientName;
 
+  const assignableCount = assignLines?.filter((line) => line.willAssign).length ?? 0;
+  const manualVerifyIds = (verifyIds ?? []).filter((id) => manualIds.has(id) && !bbpsById[id]?.verified);
+  const multipleVerify = (verifyIds?.length ?? 0) > 1;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="My Payments"
-        description="Bills the client has paid that are not finished yet, whether Paytrix holds them or a vendor does. Verify a vendor payment here."
+        description="Every bill a client has paid, including bills assigned to a vendor. Assign a Paytrix bill when a commission rule covers it, or verify a vendor payment here."
         actions={
           <>
             <Button
@@ -523,6 +728,16 @@ export default function OrganisationMyPaymentsPage() {
               )}
             </p>
             <div className="flex flex-wrap gap-2">
+              {getUser()?.role === "ORGANISATION_ADMIN" && (
+              <Button
+                size="sm"
+                icon={<UserPlus size={14} />}
+                loading={previewingAssign}
+                onClick={openAssign}
+              >
+                Assign
+              </Button>
+              )}
               {(getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "MAKER") && (
               <Button
                 size="sm"
@@ -535,7 +750,7 @@ export default function OrganisationMyPaymentsPage() {
               </Button>
               )}
               {(getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "CHECKER") && selectedToVerify.length > 0 && (
-                <Button size="sm" icon={<ShieldCheck size={14} />} onClick={() => { setCheckNote(null); setVerifyIds(selectedToVerify); }}>
+                <Button size="sm" icon={<ShieldCheck size={14} />} onClick={() => openVerify(selectedToVerify)}>
                   Verify {selectedToVerify.length}
                 </Button>
               )}
@@ -643,7 +858,7 @@ export default function OrganisationMyPaymentsPage() {
                               loading={pickingUpId === p.id}
                               onPickUp={() => pickUp(p.id)}
                               onSettle={() => openSettle(p)}
-                              onVerify={() => { setCheckNote(null); setVerifyIds([p.id]); }}
+                              onVerify={() => openVerify([p.id])}
                             />
                           </TD>
                         </TR>
@@ -740,7 +955,7 @@ export default function OrganisationMyPaymentsPage() {
                           loading={pickingUpId === p.id}
                           onPickUp={() => pickUp(p.id)}
                           onSettle={() => openSettle(p)}
-                          onVerify={() => { setCheckNote(null); setVerifyIds([p.id]); }}
+                          onVerify={() => openVerify([p.id])}
                           fullWidth
                         />
                       </div>
@@ -754,14 +969,82 @@ export default function OrganisationMyPaymentsPage() {
       </ListCard>
 
       <Modal
-        open={verifyIds != null}
-        onClose={verifying ? () => undefined : () => setVerifyIds(null)}
-        title={verifyIds?.length === 1 ? "Verify this payment" : `Verify ${verifyIds?.length ?? 0} payments`}
-        description="The vendor marked these bills paid. Verifying records what Paytrix owes the vendor."
+        open={assignLines != null}
+        onClose={assigning ? () => undefined : () => setAssignLines(null)}
+        dismissable={!assigning}
+        size="xl"
+        title={
+          assignableCount === 0
+            ? "These bills cannot be assigned"
+            : assignableCount === 1
+              ? "Assign this bill?"
+              : `Assign ${assignableCount} bills?`
+        }
+        description="A bill moves only when an approved commission covers its biller and amount. The vendor is the one with the highest rate."
         footer={
           <>
-            <Button variant="outline" disabled={verifying} onClick={() => setVerifyIds(null)}>Cancel</Button>
-            <Button loading={verifying} onClick={() => verifyIds && verifyBills(verifyIds)}>Verify</Button>
+            <Button variant="outline" disabled={assigning} onClick={() => setAssignLines(null)}>Cancel</Button>
+            <Button
+              loading={assigning}
+              disabled={assignableCount === 0}
+              onClick={confirmAssign}
+            >
+              {assignableCount === 0 ? "Assign" : assignableCount === 1 ? "Assign bill" : `Assign ${assignableCount} bills`}
+            </Button>
+          </>
+        }
+      >
+        <ul className="flex max-h-80 flex-col gap-2 overflow-auto">
+          {assignLines?.map((line) => (
+            <li key={line.billPaymentId} className="rounded-xl border border-slate-200 px-3 py-2.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{line.billerName}</p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    <span className="font-mono">{line.consumerNumber}</span>
+                    {line.corporateName ? ` · ${line.corporateName}` : ""}
+                  </p>
+                </div>
+                <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">{inr(line.amount)}</p>
+              </div>
+              {line.willAssign ? (
+                <p className="mt-2 text-sm font-medium text-indigo-700">
+                  {line.vendorName} at {line.commissionPercent == null ? "—" : commissionLabel(line.commissionPercent)}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-slate-600">{line.reason}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Modal>
+
+      <Modal
+        open={verifyIds != null}
+        onClose={closeVerify}
+        dismissable={!verifying && !checkingBbps && !checkingId}
+        size={multipleVerify ? "xl" : "md"}
+        title={verifyIds?.length === 1 ? "Verify this payment" : `Verify ${verifyIds?.length ?? 0} payments`}
+        description={
+          multipleVerify
+            ? "Bills the provider shows as paid are verified immediately. Select any that are still due and verify them yourself."
+            : "If the provider shows this bill as paid, it is verified immediately. Otherwise you can still verify it yourself."
+        }
+        footer={
+          <>
+            <Button variant="outline" disabled={verifying || checkingBbps || !!checkingId} onClick={closeVerify}>Cancel</Button>
+            {multipleVerify && (
+              <Button variant="outline" loading={checkingBbps} disabled={verifying} onClick={checkSelectedWithBbps}>
+                Check with BBPS
+              </Button>
+            )}
+            <Button
+              loading={verifying}
+              disabled={checkingBbps || !!checkingId || (multipleVerify && manualVerifyIds.length === 0)}
+              onClick={() => verifyIds && verifyBills(multipleVerify ? manualVerifyIds : verifyIds)}
+            >
+              {multipleVerify ? `Verify ${manualVerifyIds.length}` : "Verify"}
+            </Button>
           </>
         }
       >
@@ -775,10 +1058,58 @@ export default function OrganisationMyPaymentsPage() {
             </Button>
           </div>
         )}
-        {checkNote && <p className="text-sm text-slate-700">{checkNote}</p>}
-        <p className="text-sm text-slate-600">
-          {verifyIds?.length === 1 ? "Confirm this vendor payment." : "Each selected bill must be one a vendor has marked paid."}
-        </p>
+        {verifyIds?.length === 1 && bbpsById[verifyIds[0]] && (
+          <p className={cn("mb-3 text-sm", bbpsById[verifyIds[0]].verified ? "font-medium text-emerald-700" : "text-amber-800")}>
+            {bbpsById[verifyIds[0]].summary}
+          </p>
+        )}
+        {multipleVerify ? (
+          <ul className="flex max-h-80 flex-col gap-2 overflow-auto">
+            {verifyIds?.map((id) => {
+              const payment = payments.find((item) => item.id === id);
+              const check = bbpsById[id];
+              return (
+                <li key={id} className="rounded-xl border border-slate-200 px-3 py-2.5">
+                  <div className="flex items-start gap-3">
+                    {check?.verified ? (
+                      <span className="mt-0.5 text-xs font-semibold text-emerald-700">Verified</span>
+                    ) : (
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-slate-300"
+                        aria-label={`Verify ${payment?.billerName ?? "bill"}`}
+                        checked={manualIds.has(id)}
+                        disabled={checkingBbps || verifying}
+                        onChange={() => toggleManual(id)}
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{payment?.billerName ?? "Bill"}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            <span className="font-mono">{payment?.customerBillAccountNumber}</span>
+                            {payment?.assignedVendorName ? ` · ${payment.assignedVendorName}` : ""}
+                          </p>
+                        </div>
+                        <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
+                          {payment ? inr(payment.amount) : ""}
+                        </p>
+                      </div>
+                      {check && (
+                        <p className={cn("mt-2 text-sm", check.verified ? "font-medium text-emerald-700" : "text-amber-800")}>
+                          {check.summary}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-600">Confirm this vendor payment.</p>
+        )}
       </Modal>
 
       <Modal
@@ -990,6 +1321,7 @@ function stageLabel(stage: BillPayment["vendorStage"]) {
   if (stage === "ASSIGNED") return "Waiting on the vendor";
   if (stage === "IN_PROGRESS") return "Vendor is paying";
   if (stage === "VENDOR_PAID") return "Needs verification";
+  if (stage === "VERIFIED" || stage === "REIMBURSED") return "Verified";
   return null;
 }
 

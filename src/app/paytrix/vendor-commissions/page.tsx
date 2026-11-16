@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Percent } from "lucide-react";
-import { apiFetch, ApiError } from "@/lib/api-client";
-import { getUser } from "@/lib/auth";
+import { Download, Percent } from "lucide-react";
+import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
+import { getToken, getUser } from "@/lib/auth";
+import { API_BASE_URL } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
 import { ListCard } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -61,6 +62,7 @@ export default function VendorCommissionsPage() {
   const [reference, setReference] = useState("");
   const [mode, setMode] = useState("NEFT");
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   async function load(next?: { vendorId?: string; periodStart?: string; periodEnd?: string }) {
     const vendor = next?.vendorId ?? vendorId;
@@ -101,6 +103,35 @@ export default function VendorCommissionsPage() {
     });
   }
 
+  async function downloadReport() {
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ periodStart, periodEnd });
+      if (vendorId !== "ALL") params.set("vendorClientId", vendorId);
+      const response = await trackedFetch(
+        `${API_BASE_URL}/api/v1/paytrix/vendor-commissions/export?${params}`,
+        { headers: { Authorization: `Bearer ${getToken()}` } },
+      );
+      if (!response.ok) {
+        throw new Error(await extractErrorMessage(response, "Could not download the report"));
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const named = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") ?? "");
+      link.href = url;
+      link.download = named?.[1] ?? `vendor-commission-${periodStart}-to-${periodEnd}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not download the report");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   async function receive(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -125,11 +156,18 @@ export default function VendorCommissionsPage() {
       <PageHeader
         title="Vendor Commissions"
         description="Bills Paytrix has paid a vendor for, where the commission is still to be collected."
-        actions={canReceive ? (
-          <Button icon={<Percent size={16} />} disabled={chosen.length === 0} onClick={() => setOpen(true)}>
-            Mark received{chosen.length > 0 ? ` · ${chosen.length}` : ""}
-          </Button>
-        ) : undefined}
+        actions={
+          <>
+            <Button variant="outline" icon={<Download size={16} />} loading={downloading} onClick={downloadReport}>
+              Download report
+            </Button>
+            {canReceive ? (
+              <Button icon={<Percent size={16} />} disabled={chosen.length === 0} onClick={() => setOpen(true)}>
+                Mark received{chosen.length > 0 ? ` · ${chosen.length}` : ""}
+              </Button>
+            ) : null}
+          </>
+        }
       />
       <form
         className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"

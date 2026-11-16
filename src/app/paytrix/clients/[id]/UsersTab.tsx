@@ -27,6 +27,7 @@ const STATUS_FILTERS = [
 type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
 
 function roleLabel(role: string) {
+  if (role === "BRANCH_USER") return "Branch user";
   return CLIENT_ROLES.find((item) => item.value === role)?.label ?? role;
 }
 

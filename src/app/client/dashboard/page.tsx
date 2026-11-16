@@ -85,8 +85,18 @@ function BranchHomeDashboard() {
 }
 
 export default function ClientDashboard() {
-  const user = getUser();
-  if (user?.role === "BRANCH_USER") return <BranchHomeDashboard />;
+  const [role, setRole] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    // localStorage is not available while the server renders this page. Reading it here
+    // keeps a branch user off the company dashboard, which would otherwise load the
+    // company wallet and then get rejected.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRole(getUser()?.role ?? null);
+  }, []);
+
+  if (role == null) return null;
+  if (role === "BRANCH_USER") return <BranchHomeDashboard />;
   return <CorporateDashboard />;
 }
 

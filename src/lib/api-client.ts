@@ -55,9 +55,9 @@ function endRequest() {
 
 let redirectingToLogin = false;
 
-/** A 403 means the session is no longer accepted. Clear it and leave the signed-in app. */
-function logoutOnForbidden(status: number) {
-  if (status !== 403 || typeof window === "undefined" || redirectingToLogin) return;
+/** 401 means the token is missing or expired. A 403 is only "this action is not allowed" and must keep the session. */
+function logoutIfUnauthenticated(status: number) {
+  if (status !== 401 || typeof window === "undefined" || redirectingToLogin) return;
   if (window.location.pathname === "/login") return;
   redirectingToLogin = true;
   clearSession();
@@ -72,7 +72,7 @@ export async function trackedFetch(
   beginRequest();
   try {
     const response = await fetch(input, init);
-    if (response.status === 403 && getToken()) logoutOnForbidden(response.status);
+    if (response.status === 401 && getToken()) logoutIfUnauthenticated(response.status);
     return response;
   } finally {
     endRequest();
@@ -117,7 +117,7 @@ export async function apiFetch<T>(
         // response body wasn't JSON - fall back to the generic message above
       }
       message = withRequestId(message, response.headers.get("X-Request-Id"));
-      if (auth) logoutOnForbidden(response.status);
+      if (auth) logoutIfUnauthenticated(response.status);
       throw new ApiError(message, response.status, errorCode);
     }
 

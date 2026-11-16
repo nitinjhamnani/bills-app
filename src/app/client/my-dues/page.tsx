@@ -49,7 +49,9 @@ function inr(amount: number) {
 export default function ClientMyDuesPage() {
   const toast = useToast();
   const clientId = getUser()?.clientId ?? "";
-  const canPay = getUser()?.role !== "BRANCH_USER";
+  const role = getUser()?.role;
+  const canPay = role !== "BRANCH_USER";
+  const showBranch = role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR";
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -308,7 +310,7 @@ export default function ClientMyDuesPage() {
         )}
 
         {loading ? (
-          <TableSkeleton cols={6} />
+          <TableSkeleton cols={showBranch ? 7 : 6} />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -338,6 +340,7 @@ export default function ClientMyDuesPage() {
                         ]
                       : []),
                     "Biller",
+                    ...(showBranch ? ["Branch"] : []),
                     "Consumer no.",
                     "Amount",
                     "Status",
@@ -372,12 +375,15 @@ export default function ClientMyDuesPage() {
                                 <p className="text-[11px] font-medium text-slate-400">
                                   {payment.billServiceName}
                                 </p>
-                                {payment.branchName && (
+                                {!showBranch && payment.branchName && (
                                   <p className="text-[11px] font-medium text-slate-500">{payment.branchName}</p>
                                 )}
                               </div>
                             </div>
                           </TD>
+                          {showBranch && (
+                            <TD className="text-slate-700">{payment.branchName ?? "—"}</TD>
+                          )}
                           <TD>
                             <CopyableChip text={payment.customerBillAccountNumber} label="consumer number" />
                           </TD>
@@ -402,7 +408,7 @@ export default function ClientMyDuesPage() {
                         </TR>
                         {expanded && (
                           <TR className="hover:bg-transparent">
-                            <TD colSpan={canPay ? 7 : 5} className="bg-slate-50 px-4 py-3 whitespace-normal!">
+                            <TD colSpan={(canPay ? 7 : 5) + (showBranch ? 1 : 0)} className="bg-slate-50 px-4 py-3 whitespace-normal!">
                               <PaymentDetail payment={payment} />
                             </TD>
                           </TR>
@@ -459,6 +465,11 @@ export default function ClientMyDuesPage() {
                                   {payment.billerName}
                                 </p>
                                 <p className="text-xs text-slate-500">{payment.billServiceName}</p>
+                                {showBranch && (
+                                  <p className="text-xs font-medium text-slate-600">
+                                    {payment.branchName ?? "—"}
+                                  </p>
+                                )}
                               </div>
                               <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
                                 {inr(payment.amount)}
