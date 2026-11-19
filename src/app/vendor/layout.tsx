@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3,
   LayoutDashboard,
   MessageCircle,
   Send,
@@ -20,6 +21,7 @@ const VENDOR_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/vendor/assigned-bills", label: "My Payments", icon: Send },
   { href: "/vendor/transactions", label: "Transactions", icon: ArrowLeftRight },
+  { href: "/vendor/reports", label: "Reports", icon: BarChart3, roles: ["CLIENT_ADMIN"] },
   { href: "/vendor/support", label: "Support", icon: MessageCircle },
   { href: "/vendor/users", label: "Users", icon: Users, roles: ["CLIENT_ADMIN"] },
 ];

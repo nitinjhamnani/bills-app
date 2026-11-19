@@ -535,6 +535,36 @@ export interface FundingRow {
   updatedAt: string;
 }
 
+export interface VendorCategoryPaidRow {
+  category: string;
+  bills: number;
+  amount: number;
+}
+
+export interface VendorAwaitingRow {
+  billId: string;
+  category: string;
+  corporateName: string | null;
+  amount: number;
+  paidOn: string | null;
+}
+
+export interface VendorCommissionPaidRow {
+  billId: string;
+  category: string;
+  billAmount: number;
+  commissionPercent: number | null;
+  commissionAmount: number;
+  paidOn: string | null;
+}
+
+export interface VendorCommissionReportRow {
+  vendorId: string;
+  vendorName: string;
+  commissionEarned: number;
+  commissionPending: number;
+}
+
 export interface TransactionCategoryRow {
   what: string;
   moneyIn: number;

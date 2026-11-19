@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeftRight, BadgeCheck, Building2, Store, Users } from "lucide-react";
+import { ArrowLeftRight, BadgeCheck, Building2, Percent, Store, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReportCatalog } from "@/components/reports/ReportCatalog";
 import { getUser } from "@/lib/auth";
@@ -51,6 +51,12 @@ export default function OrganisationReportsPage() {
                       label: "Transactions",
                       description: "Money in and money out for each What on the Transactions list.",
                       icon: ArrowLeftRight,
+                    },
+                    {
+                      href: "/paytrix/reports/vendor-commission",
+                      label: "Vendor commission",
+                      description: "Commission received from each vendor in the period, and what is still pending.",
+                      icon: Percent,
                     },
                   ],
                 },
