@@ -100,7 +100,7 @@ export function CommissionForm({
       open
       onClose={saving ? () => undefined : () => onClose(false)}
       size="md"
-      title={editing ? "Edit commission" : "Add commission"}
+      title={editing ? "Edit commission" : "Add vendor rule"}
       description={editing
         ? "The range and percent can change. Category, operator, and vendor stay as they are."
         : "A new commission is approved straight away. Its amount band comes from the range you pick."}

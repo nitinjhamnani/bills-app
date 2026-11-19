@@ -24,12 +24,12 @@ import { Field, PasswordField } from "@/components/ui/Field";
 import { StatCard } from "@/components/ui/StatCard";
 import { Skeleton, StatCardSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
-import { CommissionForm } from "@/app/paytrix/commissions/CommissionForm";
+import { CommissionForm } from "@/app/paytrix/vendor-rules/CommissionForm";
 import {
   formatPercent,
   formatRange,
   type Commission,
-} from "@/app/paytrix/commissions/format";
+} from "@/app/paytrix/vendor-rules/format";
 import {
   isOrgAdmin,
   type BillPayment,
@@ -349,7 +349,7 @@ export function VendorOverviewTab({
                 {commissions.map((row) => (
                   <li
                     key={row.id}
-                    onClick={() => router.push(`/paytrix/commissions/${row.id}`)}
+                    onClick={() => router.push(`/paytrix/vendor-rules/${row.id}`)}
                     className="grid cursor-pointer grid-cols-[1fr_auto] items-center gap-4 px-5 py-3.5 transition-colors hover:bg-slate-50/70"
                   >
                     <div className="min-w-0">

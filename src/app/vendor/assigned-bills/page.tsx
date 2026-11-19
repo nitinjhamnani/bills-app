@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Download, FileText, Search, Upload } from "lucide-react";
-import { ConfirmAction, type ActionDetail } from "@/app/paytrix/commissions/ConfirmAction";
+import { ConfirmAction, type ActionDetail } from "@/app/paytrix/vendor-rules/ConfirmAction";
 import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";

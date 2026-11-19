@@ -45,7 +45,7 @@ import { VendorTransactionsTab } from "./VendorTransactionsTab";
 import { BillsTab } from "./BillsTab";
 import { UsersTab } from "./UsersTab";
 import { BranchesTab } from "./BranchesTab";
-import { CommissionsTab } from "../../commissions/CommissionsTab";
+import { CommissionsTab } from "../../vendor-rules/CommissionsTab";
 
 const CORPORATE_TABS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -59,7 +59,7 @@ const VENDOR_TABS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "transactions", label: "Transactions", icon: Receipt },
   { key: "bills", label: "Bills", icon: FileText },
-  { key: "rules", label: "Commissions", icon: BadgePercent },
+  { key: "rules", label: "Vendor Rules", icon: BadgePercent },
   { key: "users", label: "Users", icon: Users },
 ] as const;
 

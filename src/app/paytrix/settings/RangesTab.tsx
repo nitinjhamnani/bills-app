@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, TBody, TD, THead, TR } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
-import { formatRange, type CommissionRange } from "../commissions/format";
+import { formatRange, type CommissionRange } from "../vendor-rules/format";
 
 export function RangesTab({ onCount }: { onCount?: (count: number) => void }) {
   const toast = useToast();

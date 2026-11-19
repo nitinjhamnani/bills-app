@@ -127,7 +127,7 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
           </SelectField>
         </div>
         {canEdit && (
-          <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add commission</Button>
+          <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add vendor rule</Button>
         )}
       </div>
 
@@ -139,7 +139,7 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
             icon={BadgePercent}
             title="No commissions yet"
             description="Add a commission for a vendor on an operator and amount range. It is approved as soon as you save it."
-            action={canEdit ? <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add commission</Button> : undefined}
+            action={canEdit ? <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add vendor rule</Button> : undefined}
           />
         ) : visible.length === 0 ? (
           <EmptyState
@@ -156,7 +156,7 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
                 <TR
                   key={row.id}
                   className={`cursor-pointer ${row.isActive ? "" : "text-slate-400"}`}
-                  onClick={() => router.push(`/paytrix/commissions/${row.id}`)}
+                  onClick={() => router.push(`/paytrix/vendor-rules/${row.id}`)}
                 >
                   <TD onClick={(event) => event.stopPropagation()}>
                     <Switch

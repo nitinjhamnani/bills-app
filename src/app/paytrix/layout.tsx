@@ -16,7 +16,6 @@ import {
   BarChart3,
   BadgePercent,
   Banknote,
-  Percent,
   ArrowLeftRight,
 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -34,9 +33,8 @@ const NAV: NavLink[] = [
   { href: "/paytrix/users", label: "Users", icon: Users, group: "Management" },
   { href: "/paytrix/bill-dues", label: "Bill Dues", icon: FileText, group: "Corporate" },
   { href: "/paytrix/disputes", label: "Bill Disputes", icon: AlertTriangle, group: "Corporate" },
-  { href: "/paytrix/commissions", label: "Commissions", icon: BadgePercent, group: "Vendors" },
+  { href: "/paytrix/vendor-rules", label: "Vendor Rules", icon: BadgePercent, group: "Vendors" },
   { href: "/paytrix/vendor-payments", label: "Vendor Payments", icon: Banknote, group: "Vendors" },
-  { href: "/paytrix/vendor-commissions", label: "Vendor Commissions", icon: Percent, group: "Vendors" },
   { href: "/paytrix/transactions", label: "Transactions", icon: ArrowLeftRight, group: "Platform & Settings" },
   { href: "/paytrix/support-tickets", label: "Support Tickets", icon: LifeBuoy, group: "Platform & Settings" },
   { href: "/paytrix/reports", label: "Reports", icon: BarChart3, group: "Platform & Settings" },

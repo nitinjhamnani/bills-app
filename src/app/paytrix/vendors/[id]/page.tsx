@@ -38,12 +38,12 @@ import type { Client, CorporateKind } from "@/lib/types";
 import { VendorOverviewTab } from "./VendorOverviewTab";
 import { VendorTransactionsTab } from "@/app/paytrix/clients/[id]/VendorTransactionsTab";
 import { UsersTab } from "@/app/paytrix/clients/[id]/UsersTab";
-import { CommissionsTab } from "@/app/paytrix/commissions/CommissionsTab";
+import { CommissionsTab } from "@/app/paytrix/vendor-rules/CommissionsTab";
 
 const VENDOR_TABS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "transactions", label: "Transactions", icon: Receipt },
-  { key: "rules", label: "Commissions", icon: BadgePercent },
+  { key: "rules", label: "Vendor Rules", icon: BadgePercent },
   { key: "users", label: "Users", icon: Users },
 ] as const;
 
