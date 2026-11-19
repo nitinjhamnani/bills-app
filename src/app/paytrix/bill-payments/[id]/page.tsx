@@ -94,10 +94,10 @@ export default function OrganisationMyPaymentDetailsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Link
-        href="/paytrix/my-payments"
+        href="/paytrix/bill-payments"
         className="mb-2 inline-flex shrink-0 items-center gap-1 text-xs font-medium text-slate-500 hover:text-accent"
       >
-        <ArrowLeft size={14} /> Back to My Payments
+        <ArrowLeft size={14} /> Back to Bill Payments
       </Link>
 
       <div className="mb-6 flex shrink-0 flex-wrap items-start justify-between gap-4">

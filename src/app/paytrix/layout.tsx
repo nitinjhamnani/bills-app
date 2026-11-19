@@ -27,7 +27,7 @@ import { isOrgAdmin, type OrganisationMe, type UserProfile } from "@/lib/types";
 
 const NAV: NavLink[] = [
   { href: "/paytrix/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/paytrix/my-payments", label: "Bill Payments", icon: Send },
+  { href: "/paytrix/bill-payments", label: "Bill Payments", icon: Send },
   { href: "/paytrix/corporates", label: "Corporates", icon: Building2, group: "Management" },
   { href: "/paytrix/vendors", label: "Vendors", icon: Store, group: "Management" },
   { href: "/paytrix/manage-wallets", label: "Wallets", icon: Wallet, group: "Management" },

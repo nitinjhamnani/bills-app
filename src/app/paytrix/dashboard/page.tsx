@@ -40,8 +40,8 @@ const LINKS = [
     icon: Store,
   },
   {
-    href: "/paytrix/my-payments",
-    label: "My Payments",
+    href: "/paytrix/bill-payments",
+    label: "Bill Payments",
     description: "Pick up bills clients have paid and settle them.",
     icon: Clock,
   },
@@ -95,8 +95,8 @@ export default function OrganisationDashboard() {
                   : "Bills a client has paid that still need a pick-up or a settlement."}
             </p>
           </div>
-          <Button icon={<ChevronRight size={16} />} onClick={() => router.push("/paytrix/my-payments")}>
-            Open My Payments
+          <Button icon={<ChevronRight size={16} />} onClick={() => router.push("/paytrix/bill-payments")}>
+            View Payments
           </Button>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-3">

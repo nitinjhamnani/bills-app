@@ -1,36 +1,51 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, FileText, Settings, SlidersHorizontal, X } from "lucide-react";
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  FileText,
+  GitBranch,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, SelectField } from "@/components/ui/Field";
-import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
+import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import type { Client, ManagedBill } from "@/lib/types";
 
-interface BillFetchDetail {
-  billFetchId: string;
-  billId: string;
-  billAmount: number | null;
-  billCycle: string | null;
-  billDueDate: string | null;
-  billGeneratedDate: string | null;
-  billConsumerName: string | null;
-  billStatus: string;
-  billPaymentStatus: string;
-  fetchedOn: string | null;
-  fetchStatus: string;
-  fetchRemarks: string | null;
-  fetchProvider: string | null;
-  fetchSnapshotJson: string | null;
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export default function OrganisationBillDuesPage() {
@@ -40,6 +55,11 @@ export default function OrganisationBillDuesPage() {
   const [bills, setBills] = useState<ManagedBill[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState("ALL");
   const [consumerNumber, setConsumerNumber] = useState("");
@@ -47,38 +67,6 @@ export default function OrganisationBillDuesPage() {
   const [billerName, setBillerName] = useState("ALL");
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
-
-  const [openMenuBillId, setOpenMenuBillId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
-  const menuContainerRef = useRef<HTMLDivElement>(null);
-
-  const [activeFetchBill, setActiveFetchBill] = useState<ManagedBill | null>(null);
-  const [fetchDetail, setFetchDetail] = useState<BillFetchDetail | null>(null);
-  const [fetchLoading, setFetchLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!openMenuBillId) return;
-    function handleOutside(event: MouseEvent) {
-      if (menuContainerRef.current && !menuContainerRef.current.contains(event.target as Node)) {
-        setOpenMenuBillId(null);
-      }
-    }
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpenMenuBillId(null);
-    }
-    function handleScroll() {
-      setOpenMenuBillId(null);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    document.addEventListener("keydown", handleKey);
-    window.addEventListener("scroll", handleScroll, true);
-    return () => {
-      document.removeEventListener("mousedown", handleOutside);
-      document.removeEventListener("keydown", handleKey);
-      window.removeEventListener("scroll", handleScroll, true);
-    };
-  }, [openMenuBillId]);
 
   useEffect(() => {
     apiFetch<Client[]>("/api/v1/paytrix/clients")
@@ -108,25 +96,14 @@ export default function OrganisationBillDuesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function openFetchDetails(bill: ManagedBill) {
-    setOpenMenuBillId(null);
-    setActiveFetchBill(bill);
-    setFetchDetail(null);
-    setFetchError(null);
-    if (!bill.latestBillFetchId) {
-      setFetchError("No bill fetch record is linked to this bill yet.");
-      return;
-    }
-    setFetchLoading(true);
+  async function copyText(key: string, text: string, label: string) {
     try {
-      const detail = await apiFetch<BillFetchDetail>(
-        `/api/v1/paytrix/managed-bills/fetches/${encodeURIComponent(bill.latestBillFetchId)}`,
-      );
-      setFetchDetail(detail);
-    } catch (err) {
-      setFetchError(err instanceof ApiError ? err.message : "Failed to load fetch details");
-    } finally {
-      setFetchLoading(false);
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      toast.success(`Copied ${text}`);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      toast.error(`Could not copy ${label}`);
     }
   }
 
@@ -159,9 +136,34 @@ export default function OrganisationBillDuesPage() {
         bill.customerBillAccountNumber.toLowerCase().includes(query),
       );
     }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(
+        (bill) =>
+          bill.id.toLowerCase().includes(q) ||
+          (bill.clientName ?? "").toLowerCase().includes(q) ||
+          (bill.clientCode ?? "").toLowerCase().includes(q) ||
+          (bill.branchName ?? "").toLowerCase().includes(q) ||
+          bill.billerName.toLowerCase().includes(q) ||
+          bill.customerBillAccountNumber.toLowerCase().includes(q) ||
+          (bill.customerName ?? "").toLowerCase().includes(q),
+      );
+    }
     result = result.filter((bill) => matchesAmount(bill.amount, amountMin, amountMax));
     return result;
-  }, [bills, selectedClientId, billerCategory, billerName, consumerNumber, amountMin, amountMax]);
+  }, [
+    bills,
+    selectedClientId,
+    billerCategory,
+    billerName,
+    consumerNumber,
+    search,
+    amountMin,
+    amountMax,
+  ]);
+
+  const totalPages = Math.ceil(visible.length / pageSize);
+  const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const amountRangeActive = Boolean(amountMin.trim() || amountMax.trim());
   const activeFilterCount = [
@@ -182,10 +184,11 @@ export default function OrganisationBillDuesPage() {
     setConsumerNumber("");
     setAmountMin("");
     setAmountMax("");
+    setCurrentPage(1);
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Bill Dues"
         description="All corporate bills that have been fetched and are currently due for payment."
@@ -210,20 +213,38 @@ export default function OrganisationBillDuesPage() {
           {selectedClientId !== "ALL" && (
             <FilterChip
               label={clientLabel ?? selectedClientId}
-              onClear={() => setSelectedClientId("ALL")}
+              onClear={() => {
+                setSelectedClientId("ALL");
+                setCurrentPage(1);
+              }}
             />
           )}
           {consumerNumber.trim() && (
-            <FilterChip label={consumerNumber.trim()} onClear={() => setConsumerNumber("")} />
+            <FilterChip
+              label={consumerNumber.trim()}
+              onClear={() => {
+                setConsumerNumber("");
+                setCurrentPage(1);
+              }}
+            />
           )}
           {billerCategory !== "ALL" && (
             <FilterChip
               label={categoryLabel ?? billerCategory}
-              onClear={() => setBillerCategory("ALL")}
+              onClear={() => {
+                setBillerCategory("ALL");
+                setCurrentPage(1);
+              }}
             />
           )}
           {billerName !== "ALL" && (
-            <FilterChip label={billerName} onClear={() => setBillerName("ALL")} />
+            <FilterChip
+              label={billerName}
+              onClear={() => {
+                setBillerName("ALL");
+                setCurrentPage(1);
+              }}
+            />
           )}
           {amountRangeActive && (
             <FilterChip
@@ -231,6 +252,7 @@ export default function OrganisationBillDuesPage() {
               onClear={() => {
                 setAmountMin("");
                 setAmountMax("");
+                setCurrentPage(1);
               }}
             />
           )}
@@ -245,8 +267,27 @@ export default function OrganisationBillDuesPage() {
       )}
 
       <ListCard fitContent={false}>
+        <div className="shrink-0 border-b border-slate-100 px-4 py-3">
+          <div className="relative sm:max-w-sm">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search corporate, bill code, biller, or consumer no."
+              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+        </div>
+
         {loading ? (
-          <TableSkeleton cols={9} />
+          <TableSkeleton cols={7} />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -254,131 +295,150 @@ export default function OrganisationBillDuesPage() {
             description={
               bills.length === 0
                 ? "Bills appear here once a corporate bill is fetched and has a pending due."
-                : "Try another filter or clear the ones that are on."
+                : "Try another filter or clear the search."
             }
             action={
               bills.length > 0 ? (
-                <Button variant="outline" onClick={resetFilters}>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    resetFilters();
+                    setSearch("");
+                  }}
+                >
                   Clear filters
                 </Button>
               ) : undefined
             }
           />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto">
+          <>
             <Table>
               <THead
                 columns={[
                   "Corporate",
-                  "Branch",
+                  "Bill Code",
                   "Biller",
-                  "Consumer / Customer",
+                  "Consumer",
                   "Amount",
-                  "Payment status",
-                  "Bill status",
                   "Due date",
                   "Last fetch",
                   "",
                 ]}
               />
               <TBody>
-                {visible.map((b) => (
-                  <TR
-                    key={b.id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/paytrix/managed-bills/${b.id}`)}
-                  >
-                    <TD className="font-medium text-slate-900">
-                      {b.clientName ?? "—"}
-                      {b.clientCode && (
-                        <span className="ml-1.5 font-mono text-[11px] font-normal text-slate-400">
-                          {b.clientCode}
-                        </span>
-                      )}
-                    </TD>
-                    <TD className="text-slate-700">{b.branchName ?? "—"}</TD>
-                    <TD>
-                      {b.billerName}
-                      <p className="text-[11px] font-normal text-slate-400">
-                        {b.billServiceName}
-                      </p>
-                    </TD>
-                    <TD>
-                      <p className="text-slate-700">{b.customerName ?? "—"}</p>
-                      <p className="font-mono text-[11px] text-slate-400">
-                        {b.customerBillAccountNumber}
-                      </p>
-                    </TD>
-                    <TD className="font-semibold text-slate-900">
-                      {b.amount != null ? `₹${b.amount.toLocaleString("en-IN")}` : "—"}
-                    </TD>
-                    <TD>
-                      <StatusBadge status={b.paymentStatus} />
-                    </TD>
-                    <TD>
-                      <StatusBadge status={b.billStatus} />
-                    </TD>
-                    <TD className="text-slate-600">{b.dueDate ?? "—"}</TD>
-                    <TD>
-                      {b.lastFetchAt ? (
-                        <span className="text-xs text-slate-500">
-                          {new Date(b.lastFetchAt).toLocaleString()}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-300">—</span>
-                      )}
-                    </TD>
-                    <TD className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <div
-                        ref={openMenuBillId === b.id ? menuContainerRef : undefined}
-                        className="inline-block text-left"
-                      >
+                {paged.map((b) => {
+                  const corpCode = b.clientCode || b.clientId;
+                  return (
+                    <TR
+                      key={b.id}
+                      className="cursor-pointer"
+                      onClick={() => router.push(`/paytrix/bills/${b.id}`)}
+                    >
+                      <TD>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">
+                            {b.clientName ?? "—"}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            {corpCode && (
+                              <button
+                                type="button"
+                                title="Copy corporate code"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  copyText(`corp:${b.id}`, corpCode, "corporate code");
+                                }}
+                                className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                              >
+                                <span>{corpCode}</span>
+                                {copiedKey === `corp:${b.id}` ? (
+                                  <Check size={11} className="text-emerald-600" />
+                                ) : (
+                                  <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                                )}
+                              </button>
+                            )}
+                            {b.branchName && (
+                              <span className="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/80 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
+                                <GitBranch size={11} className="text-indigo-500" />
+                                {b.branchName}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </TD>
+                      <TD onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          aria-label={`Actions for bill ${b.customerBillAccountNumber}`}
-                          aria-haspopup="menu"
-                          aria-expanded={openMenuBillId === b.id}
-                          onClick={(event) => {
-                            if (openMenuBillId === b.id) {
-                              setOpenMenuBillId(null);
-                              return;
-                            }
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            setMenuPos({
-                              top: rect.bottom + 6,
-                              right: window.innerWidth - rect.right,
-                            });
-                            setOpenMenuBillId(b.id);
-                          }}
-                          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                          title="Copy bill code"
+                          onClick={() => copyText(`bill:${b.id}`, b.id, "bill code")}
+                          className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
                         >
-                          <Settings size={15} />
+                          <span>{b.id}</span>
+                          {copiedKey === `bill:${b.id}` ? (
+                            <Check size={12} className="text-emerald-600" />
+                          ) : (
+                            <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                          )}
                         </button>
-
-                        {openMenuBillId === b.id && menuPos && (
-                          <div
-                            role="menu"
-                            style={{ top: menuPos.top, right: menuPos.right }}
-                            className="fixed z-50 w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
-                          >
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => openFetchDetails(b)}
-                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              <Eye size={14} className="text-slate-400" />
-                              View fetch details
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </TD>
-                  </TR>
-                ))}
+                      </TD>
+                      <TD>
+                        <p className="font-semibold text-slate-900">{b.billerName}</p>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                          {b.billServiceName}
+                        </p>
+                      </TD>
+                      <TD onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          title="Copy consumer ID"
+                          onClick={() =>
+                            copyText(
+                              `consumer:${b.id}`,
+                              b.customerBillAccountNumber,
+                              "consumer ID",
+                            )
+                          }
+                          className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 -ml-1.5 font-mono text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                        >
+                          <span>{b.customerBillAccountNumber}</span>
+                          {copiedKey === `consumer:${b.id}` ? (
+                            <Check size={12} className="text-emerald-600" />
+                          ) : (
+                            <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                          )}
+                        </button>
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                          {b.customerName || "—"}
+                        </p>
+                      </TD>
+                      <TD className="font-mono font-semibold text-slate-900">
+                        {b.amount != null ? `₹${b.amount.toLocaleString("en-IN")}` : "—"}
+                      </TD>
+                      <TD className="text-xs text-slate-600">{formatDate(b.dueDate)}</TD>
+                      <TD className="text-xs text-slate-500">{formatDateTime(b.lastFetchAt)}</TD>
+                      <TD>
+                        <ChevronRight size={16} className="ml-auto text-slate-300" />
+                      </TD>
+                    </TR>
+                  );
+                })}
               </TBody>
             </Table>
-          </div>
+
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={visible.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
+          </>
         )}
       </ListCard>
 
@@ -400,7 +460,10 @@ export default function OrganisationBillDuesPage() {
           <SelectField
             label="Corporate"
             value={selectedClientId}
-            onChange={(e) => setSelectedClientId(e.target.value)}
+            onChange={(e) => {
+              setSelectedClientId(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="ALL">All</option>
             {clients.map((client) => (
@@ -413,13 +476,19 @@ export default function OrganisationBillDuesPage() {
           <Field
             label="Consumer number"
             value={consumerNumber}
-            onChange={(e) => setConsumerNumber(e.target.value)}
+            onChange={(e) => {
+              setConsumerNumber(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="e.g. 100234567"
           />
           <SelectField
             label="Biller category"
             value={billerCategory}
-            onChange={(e) => setBillerCategory(e.target.value)}
+            onChange={(e) => {
+              setBillerCategory(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="ALL">All</option>
             {categoryOptions.map(([code, name]) => (
@@ -431,7 +500,10 @@ export default function OrganisationBillDuesPage() {
           <SelectField
             label="Biller name"
             value={billerName}
-            onChange={(e) => setBillerName(e.target.value)}
+            onChange={(e) => {
+              setBillerName(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="ALL">All</option>
             {billerOptions.map((name) => (
@@ -447,7 +519,10 @@ export default function OrganisationBillDuesPage() {
               min={0}
               step="0.01"
               value={amountMin}
-              onChange={(e) => setAmountMin(e.target.value)}
+              onChange={(e) => {
+                setAmountMin(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="0"
             />
             <Field
@@ -456,116 +531,14 @@ export default function OrganisationBillDuesPage() {
               min={0}
               step="0.01"
               value={amountMax}
-              onChange={(e) => setAmountMax(e.target.value)}
+              onChange={(e) => {
+                setAmountMax(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="No limit"
             />
           </div>
         </div>
-      </Modal>
-
-      <Modal
-        open={activeFetchBill !== null}
-        onClose={() => setActiveFetchBill(null)}
-        title="Bill fetch details"
-        description={
-          activeFetchBill
-            ? `${activeFetchBill.billerName} · ${activeFetchBill.customerBillAccountNumber}`
-            : undefined
-        }
-      >
-        {fetchLoading ? (
-          <p className="py-6 text-center text-sm text-slate-500">Loading fetch details...</p>
-        ) : fetchError ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
-            {fetchError}
-          </div>
-        ) : fetchDetail ? (
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm">
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Fetch status
-                </p>
-                <div className="mt-1">
-                  <StatusBadge status={fetchDetail.fetchStatus} />
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Bill status
-                </p>
-                <div className="mt-1">
-                  <StatusBadge status={fetchDetail.billStatus} />
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Payment status
-                </p>
-                <div className="mt-1">
-                  <StatusBadge status={fetchDetail.billPaymentStatus} />
-                </div>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Bill amount
-                </p>
-                <p className="mt-1 font-mono text-sm font-bold text-slate-900">
-                  {fetchDetail.billAmount != null
-                    ? `₹${Number(fetchDetail.billAmount).toLocaleString("en-IN")}`
-                    : "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Consumer name
-                </p>
-                <p className="mt-1 font-medium text-slate-900">
-                  {fetchDetail.billConsumerName || "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Bill cycle
-                </p>
-                <p className="mt-1 text-slate-700">{fetchDetail.billCycle || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Generated date
-                </p>
-                <p className="mt-1 text-slate-700">{fetchDetail.billGeneratedDate || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Due date
-                </p>
-                <p className="mt-1 text-slate-700">{fetchDetail.billDueDate || "—"}</p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Provider
-                </p>
-                <p className="mt-1 font-mono text-xs text-slate-700">
-                  {fetchDetail.fetchProvider || "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-                  Fetched on
-                </p>
-                <p className="mt-1 text-xs text-slate-700">
-                  {fetchDetail.fetchedOn ? new Date(fetchDetail.fetchedOn).toLocaleString() : "—"}
-                </p>
-              </div>
-            </div>
-            {fetchDetail.fetchRemarks && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900">
-                <span className="font-semibold">Remarks:</span> {fetchDetail.fetchRemarks}
-              </div>
-            )}
-          </div>
-        ) : null}
       </Modal>
     </div>
   );

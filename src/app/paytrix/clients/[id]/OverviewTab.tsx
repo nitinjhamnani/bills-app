@@ -300,7 +300,7 @@ export function OverviewTab({
 
       {vendor && (
         <p className="text-sm text-slate-500">
-          These are bills assigned from corporates. The Bills tab lists every one. A bill appears in the vendor&apos;s Transactions only after Paytrix verifies it, and it stays on My Payments with the latest status.
+          These are bills assigned from corporates. The Bills tab lists every one. A bill appears in the vendor&apos;s Transactions only after Paytrix verifies it, and it stays on Bill Payments with the latest status.
         </p>
       )}
 

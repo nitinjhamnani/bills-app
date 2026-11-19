@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Eye, FileText, Plus, Search, Settings } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { getUser } from "@/lib/auth";
@@ -199,6 +200,7 @@ function VendorBills({ clientId }: { clientId: string }) {
 
 function CorporateBills({ clientId }: { clientId: string }) {
   const toast = useToast();
+  const router = useRouter();
   const isAdmin = isOrgAdmin(getUser()?.role);
   const [bills, setBills] = useState<ManagedBill[]>([]);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
@@ -361,16 +363,20 @@ function CorporateBills({ clientId }: { clientId: string }) {
             />
             <TBody>
               {visible.map((bill) => (
-                <TR key={bill.id}>
+                <TR
+                  key={bill.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/paytrix/bills/${bill.id}`)}
+                >
                   <TD className="font-mono text-xs font-semibold text-slate-700">{bill.id}</TD>
                   <TD className="font-semibold text-slate-900">{bill.billerName}</TD>
                   <TD className="text-xs text-slate-600">{bill.billServiceName}</TD>
-                  <TD>
+                  <TD onClick={(e) => e.stopPropagation()}>
                     <CopyableChip text={bill.customerBillAccountNumber} label="consumer number" />
                   </TD>
                   <TD className="text-xs text-slate-700">{bill.branchName ?? "—"}</TD>
                   <TD className="text-xs text-slate-500">{formatDate(bill.createdAt)}</TD>
-                  <TD className="text-right">
+                  <TD className="text-right" onClick={(e) => e.stopPropagation()}>
                     <div
                       ref={openMenuBillId === bill.id ? menuContainerRef : undefined}
                       className="inline-block text-left"
