@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
-import { Field, SelectField } from "@/components/ui/Field";
+import { Field, SearchableSelect, SelectField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import type { Client } from "@/lib/types";
@@ -11,16 +11,25 @@ import { formatRange, type Commission, type CommissionRange } from "./format";
 
 interface Named { id: string; name: string }
 
+const DEFAULT_CATEGORY_ID = "Electricity";
+
 /** Adds an approved commission, or edits the range and rate of one. */
-export function CommissionForm({ editing, onClose }: { editing?: Commission; onClose: (saved: boolean) => void }) {
+export function CommissionForm({
+  editing,
+  defaultVendorId,
+  onClose,
+}: {
+  editing?: Commission;
+  defaultVendorId?: string;
+  onClose: (saved: boolean) => void;
+}) {
   const toast = useToast();
   const [ranges, setRanges] = useState<CommissionRange[]>([]);
-  const [categories, setCategories] = useState<Named[]>([]);
   const [operators, setOperators] = useState<Named[]>([]);
   const [vendors, setVendors] = useState<Client[]>([]);
-  const [categoryId, setCategoryId] = useState(editing?.categoryCode ?? "");
+  const categoryId = editing?.categoryCode ?? DEFAULT_CATEGORY_ID;
   const [operatorId, setOperatorId] = useState(editing?.operatorId ?? "");
-  const [vendorId, setVendorId] = useState(editing?.vendorId ?? "");
+  const [vendorId, setVendorId] = useState(editing?.vendorId ?? defaultVendorId ?? "");
   const [rangeId, setRangeId] = useState("");
   const [commission, setCommission] = useState(editing ? String(editing.commission) : "");
   const [saving, setSaving] = useState(false);
@@ -30,22 +39,25 @@ export function CommissionForm({ editing, onClose }: { editing?: Commission; onC
       .then((rows) => setRanges(rows.filter((range) => range.isActive)))
       .catch(() => setRanges([]));
     if (editing) return;
-    apiFetch<Array<{ categoryId: string; name: string; enabled: boolean }>>("/api/v1/paytrix/categories")
-      .then((rows) => setCategories(rows.filter((row) => row.enabled).map((row) => ({ id: row.categoryId, name: row.name }))))
-      .catch(() => setCategories([]));
-    apiFetch<Client[]>("/api/v1/paytrix/clients")
-      .then((rows) => setVendors(rows.filter((row) => row.clientType === "VENDOR" && (row.status === "ACTIVE" || row.status === "PENDING"))))
-      .catch(() => setVendors([]));
-  }, [editing]);
-
-  useEffect(() => {
-    if (editing || !categoryId) return;
     apiFetch<Array<{ billerId: string; name: string }>>(
-      `/api/v1/paytrix/commissions/providers?categoryId=${encodeURIComponent(categoryId)}`,
+      `/api/v1/paytrix/commissions/providers?categoryId=${encodeURIComponent(DEFAULT_CATEGORY_ID)}`,
     )
       .then((rows) => setOperators(rows.map((row) => ({ id: row.billerId, name: row.name || row.billerId }))))
       .catch(() => setOperators([]));
-  }, [categoryId, editing]);
+    if (!defaultVendorId) {
+      apiFetch<Client[]>("/api/v1/paytrix/clients")
+        .then((rows) =>
+          setVendors(
+            rows.filter(
+              (row) =>
+                row.clientType === "VENDOR" &&
+                (row.status === "ACTIVE" || row.status === "PENDING"),
+            ),
+          ),
+        )
+        .catch(() => setVendors([]));
+    }
+  }, [editing, defaultVendorId]);
 
   useEffect(() => {
     if (!editing || rangeId || ranges.length === 0) return;
@@ -67,7 +79,10 @@ export function CommissionForm({ editing, onClose }: { editing?: Commission; onC
       if (editing) {
         await apiFetch(`/api/v1/paytrix/commissions/${editing.id}`, { method: "PUT", body });
       } else {
-        await apiFetch("/api/v1/paytrix/commissions", { method: "POST", body: { ...body, categoryId, operatorId, vendorId } });
+        await apiFetch("/api/v1/paytrix/commissions", {
+          method: "POST",
+          body: { ...body, categoryId: DEFAULT_CATEGORY_ID, operatorId, vendorId },
+        });
       }
       toast.success(editing ? "Commission updated" : "Commission saved");
       onClose(true);
@@ -78,7 +93,7 @@ export function CommissionForm({ editing, onClose }: { editing?: Commission; onC
     }
   }
 
-  const ready = (editing || (categoryId && operatorId && vendorId)) && rangeId !== "" && commission.trim() !== "";
+  const ready = (editing || (operatorId && vendorId)) && rangeId !== "" && commission.trim() !== "";
 
   return (
     <Modal
@@ -108,18 +123,31 @@ export function CommissionForm({ editing, onClose }: { editing?: Commission; onC
           </dl>
         ) : (
           <>
-            <SelectField label="Category" required value={categoryId} onChange={(e) => { setCategoryId(e.target.value); setOperatorId(""); }}>
-              <option value="">Select a category</option>
-              {categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </SelectField>
-            <SelectField label="Operator" required value={operatorId} onChange={(e) => setOperatorId(e.target.value)} disabled={!categoryId}>
-              <option value="">{categoryId ? "Select an operator" : "Choose a category first"}</option>
-              {operators.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </SelectField>
-            <SelectField label="Vendor" required value={vendorId} onChange={(e) => setVendorId(e.target.value)}>
-              <option value="">Select a vendor</option>
-              {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.clientName}</option>)}
-            </SelectField>
+            <SearchableSelect
+              label="Operator"
+              value={operatorId}
+              onChange={setOperatorId}
+              placeholder="Select an operator..."
+              searchPlaceholder="Search operators..."
+              options={operators.map((item) => ({
+                value: item.id,
+                label: item.name,
+              }))}
+            />
+            {!defaultVendorId && (
+              <SearchableSelect
+                label="Vendor"
+                value={vendorId}
+                onChange={setVendorId}
+                placeholder="Select a vendor..."
+                searchPlaceholder="Search vendors..."
+                options={vendors.map((vendor) => ({
+                  value: vendor.id,
+                  label: vendor.clientName,
+                  sublabel: vendor.clientCode ?? undefined,
+                }))}
+              />
+            )}
           </>
         )}
         <SelectField label="Range" required value={rangeId} onChange={(e) => setRangeId(e.target.value)}>

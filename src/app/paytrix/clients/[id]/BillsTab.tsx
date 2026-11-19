@@ -1,25 +1,28 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, Eye, FileText, Plus, Search, Settings } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { getUser } from "@/lib/auth";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ListCard } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { CopyableChip } from "@/components/ui/CopyableChip";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
-import { TableSkeleton } from "@/components/ui/Skeleton";
+import { Skeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
-import type { BillPayment, ClientType, OrgStatus } from "@/lib/types";
+import {
+  isOrgAdmin,
+  type BillFetchRecord,
+  type BillPayment,
+  type ClientType,
+  type ManagedBill,
+} from "@/lib/types";
 import { vendorStageBadge, vendorStageOf } from "@/lib/vendor-stage";
-
-const FILTERS: { key: OrgStatus | "ALL"; label: string }[] = [
-  { key: "ALL", label: "All" },
-  { key: "NA", label: "Awaiting client" },
-  { key: "PENDING", label: "Awaiting pick-up" },
-  { key: "IN_PROCESS", label: "In process" },
-  { key: "PAID", label: "Paid" },
-];
+import { CreateBillModal } from "@/app/client/managed-bills/CreateBillModal";
 
 type VendorStage = "ASSIGNED" | "IN_PROGRESS" | "VENDOR_PAID" | "VERIFIED" | "REIMBURSED";
 
@@ -33,6 +36,30 @@ const VENDOR_FILTERS: { key: VendorStage | "ALL" | "VERIFIED_GROUP"; label: stri
 
 function vendorStage(bill: BillPayment): string {
   return vendorStageOf(bill);
+}
+
+function formatDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function VendorBills({ clientId }: { clientId: string }) {
@@ -172,80 +199,131 @@ function VendorBills({ clientId }: { clientId: string }) {
 
 function CorporateBills({ clientId }: { clientId: string }) {
   const toast = useToast();
-  const [payments, setPayments] = useState<BillPayment[]>([]);
+  const isAdmin = isOrgAdmin(getUser()?.role);
+  const [bills, setBills] = useState<ManagedBill[]>([]);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<OrgStatus | "ALL">("ALL");
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  const [openMenuBillId, setOpenMenuBillId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement>(null);
+
+  const [selectedBillForFetch, setSelectedBillForFetch] = useState<ManagedBill | null>(null);
+  const [fetchDetails, setFetchDetails] = useState<BillFetchRecord | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+
+  useEffect(() => {
+    if (!openMenuBillId) return;
+    function handleOutside(event: MouseEvent) {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(event.target as Node)) {
+        setOpenMenuBillId(null);
+      }
+    }
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpenMenuBillId(null);
+    }
+    function handleScroll() {
+      setOpenMenuBillId(null);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", handleScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [openMenuBillId]);
+
+  async function loadBills(silent = false) {
+    if (!silent) setLoading(true);
     try {
-      setPayments(
-        await apiFetch<BillPayment[]>(`/api/v1/paytrix/clients/${clientId}/bill-payments`),
-      );
+      const [rows, branchRows] = await Promise.all([
+        apiFetch<ManagedBill[]>(`/api/v1/paytrix/managed-bills?clientId=${encodeURIComponent(clientId)}`),
+        apiFetch<{ id: string; name: string }[]>(`/api/v1/paytrix/clients/${clientId}/branches`).catch(
+          () => [] as { id: string; name: string }[],
+        ),
+      ]);
+      setBills(rows);
+      setBranches(branchRows);
     } catch (err) {
-      toast.error(
-        err instanceof ApiError ? err.message : "Failed to load bills",
-      );
+      toast.error(err instanceof ApiError ? err.message : "Failed to load bills");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    loadBills();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
 
-  const visible = useMemo(
-    () => (filter === "ALL" ? payments : payments.filter((p) => p.orgStatus === filter)),
-    [payments, filter],
-  );
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: payments.length };
-    for (const p of payments) c[p.orgStatus] = (c[p.orgStatus] ?? 0) + 1;
-    return c;
-  }, [payments]);
-
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  async function openFetchDetailsModal(bill: ManagedBill) {
+    setOpenMenuBillId(null);
+    setSelectedBillForFetch(bill);
+    setFetchDetails(null);
+    if (!bill.latestBillFetchId) {
+      return;
+    }
+    setFetchLoading(true);
+    try {
+      const record = await apiFetch<BillFetchRecord>(
+        `/api/v1/paytrix/managed-bills/fetches/${encodeURIComponent(bill.latestBillFetchId)}`,
+      );
+      setFetchDetails(record);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load fetch details");
+    } finally {
+      setFetchLoading(false);
+    }
   }
 
+  const visible = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return bills;
+    return bills.filter(
+      (bill) =>
+        bill.billerName.toLowerCase().includes(query) ||
+        bill.billServiceName.toLowerCase().includes(query) ||
+        bill.customerBillAccountNumber.toLowerCase().includes(query) ||
+        (bill.branchName ?? "").toLowerCase().includes(query) ||
+        bill.id.toLowerCase().includes(query),
+    );
+  }, [bills, search]);
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-4 flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-        {FILTERS.map((f) => {
-          const active = filter === f.key;
-          return (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
-                active
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800",
-              )}
-            >
-              {f.label}
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
-                )}
-              >
-                {counts[f.key] ?? 0}
-              </span>
-            </button>
-          );
-        })}
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex shrink-0 flex-col gap-3 rounded-xl bg-slate-100 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <span className="text-xs font-semibold text-slate-700">
+          Registered bills
+          <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+            {visible.length}
+          </span>
+          {visible.length !== bills.length && (
+            <span className="ml-1.5 text-slate-400">of {bills.length}</span>
+          )}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="relative flex flex-1 items-center sm:flex-initial">
+            <Search size={14} className="pointer-events-none absolute left-3 text-slate-400" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search biller, consumer no., or branch"
+              aria-label="Search registered bills"
+              className="min-h-9 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-8 text-xs text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 sm:w-64"
+            />
+          </label>
+          {isAdmin && (
+            <Button size="sm" icon={<Plus size={15} />} onClick={() => setCreateOpen(true)}>
+              Create bill
+            </Button>
+          )}
+        </div>
       </div>
 
       <ListCard fitContent={false}>
@@ -254,192 +332,221 @@ function CorporateBills({ clientId }: { clientId: string }) {
         ) : visible.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title="No bills here"
-            description="Nothing matches this filter yet."
+            title={bills.length === 0 ? "No bills created yet" : "No bills match"}
+            description={
+              bills.length === 0
+                ? "Registered bills for this corporate will appear here."
+                : "Try another biller, consumer number, or branch."
+            }
+            action={
+              isAdmin && bills.length === 0 ? (
+                <Button icon={<Plus size={16} />} onClick={() => setCreateOpen(true)}>
+                  Create bill
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <Table>
             <THead
               columns={[
-                "",
-                "Biller",
+                "Bill ID",
+                "Operator",
+                "Category",
                 "Consumer no.",
-                "Amount",
-                "Org status",
-                "Bill status",
+                "Branch",
+                "Created on",
+                "",
               ]}
             />
             <TBody>
-              {visible.map((p) => {
-                const expanded = expandedIds.has(p.id);
-                return (
-                  <Fragment key={p.id}>
-                    <TR className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
-                      <TD onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => toggleExpand(p.id)}
-                          className="text-slate-400 transition-colors hover:text-slate-700"
+              {visible.map((bill) => (
+                <TR key={bill.id}>
+                  <TD className="font-mono text-xs font-semibold text-slate-700">{bill.id}</TD>
+                  <TD className="font-semibold text-slate-900">{bill.billerName}</TD>
+                  <TD className="text-xs text-slate-600">{bill.billServiceName}</TD>
+                  <TD>
+                    <CopyableChip text={bill.customerBillAccountNumber} label="consumer number" />
+                  </TD>
+                  <TD className="text-xs text-slate-700">{bill.branchName ?? "—"}</TD>
+                  <TD className="text-xs text-slate-500">{formatDate(bill.createdAt)}</TD>
+                  <TD className="text-right">
+                    <div
+                      ref={openMenuBillId === bill.id ? menuContainerRef : undefined}
+                      className="inline-block text-left"
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Actions for bill ${bill.id}`}
+                        aria-haspopup="menu"
+                        aria-expanded={openMenuBillId === bill.id}
+                        onClick={(event) => {
+                          if (openMenuBillId === bill.id) {
+                            setOpenMenuBillId(null);
+                            return;
+                          }
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          setMenuPos({
+                            top: rect.bottom + 6,
+                            right: window.innerWidth - rect.right,
+                          });
+                          setOpenMenuBillId(bill.id);
+                        }}
+                        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                      >
+                        <Settings size={15} />
+                      </button>
+
+                      {openMenuBillId === bill.id && menuPos && (
+                        <div
+                          role="menu"
+                          style={{ top: menuPos.top, right: menuPos.right }}
+                          className="fixed z-50 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
                         >
-                          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                        </button>
-                      </TD>
-                      <TD className="font-medium text-slate-900">
-                        {p.billerName}
-                        <p className="text-[11px] font-normal text-slate-400">{p.billServiceName}</p>
-                      </TD>
-                      <TD className="font-mono text-xs">{p.customerBillAccountNumber}</TD>
-                      <TD className="font-semibold text-slate-900">₹{p.amount.toLocaleString("en-IN")}</TD>
-                      <TD>
-                        <StatusBadge status={p.orgStatus} />
-                      </TD>
-                      <TD>
-                        <StatusBadge status={p.billStatus} />
-                      </TD>
-                    </TR>
-                    {expanded && (
-                      <TR className="hover:bg-transparent">
-                        <TD colSpan={6} className="whitespace-normal bg-slate-50/60 p-4">
-                          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                            <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-                              <div className="p-4">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                  Amount
-                                </p>
-                                <dl className="mt-2 flex flex-col gap-1.5 text-xs">
-                                  {p.amountBreakdown.length > 0 ? (
-                                    p.amountBreakdown.map((c) => (
-                                      <div key={c.label} className="flex justify-between gap-4">
-                                        <dt className="text-slate-500">{c.label}</dt>
-                                        <dd className="font-medium text-slate-700">
-                                          ₹{c.amount.toLocaleString("en-IN")}
-                                        </dd>
-                                      </div>
-                                    ))
-                                  ) : (
-                                    <div className="flex justify-between gap-4">
-                                      <dt className="text-slate-500">Current charges</dt>
-                                      <dd className="font-medium text-slate-700">
-                                        ₹{p.amount.toLocaleString("en-IN")}
-                                      </dd>
-                                    </div>
-                                  )}
-                                  <div className="flex justify-between gap-4 border-t border-dashed border-slate-200 pt-1.5">
-                                    <dt className="font-semibold text-slate-600">Total</dt>
-                                    <dd className="font-bold text-slate-900">
-                                      ₹{p.amount.toLocaleString("en-IN")}
-                                    </dd>
-                                  </div>
-                                </dl>
-                              </div>
-
-                              <div className="p-4">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                  Customer &amp; biller
-                                </p>
-                                <dl className="mt-2 flex flex-col gap-1.5 text-xs">
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Customer</dt>
-                                    <dd className="font-medium text-slate-700">{p.customerName ?? "—"}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Mobile</dt>
-                                    <dd className="font-mono font-medium text-slate-700">
-                                      {p.customerMobileNumber ?? "—"}
-                                    </dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Biller</dt>
-                                    <dd className="truncate font-medium text-slate-700">{p.billerName}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Category</dt>
-                                    <dd className="font-medium text-slate-700">{p.billServiceName}</dd>
-                                  </div>
-                                </dl>
-                              </div>
-
-                              <div className="p-4">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                  Bill info
-                                </p>
-                                <dl className="mt-2 flex flex-col gap-1.5 text-xs">
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Bill no.</dt>
-                                    <dd className="font-mono font-medium text-slate-700">{p.billNumber ?? "—"}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Period</dt>
-                                    <dd className="font-medium text-slate-700">{p.billPeriod ?? "—"}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Bill date</dt>
-                                    <dd className="font-medium text-slate-700">{p.billDate ?? "—"}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Due date</dt>
-                                    <dd className="font-medium text-slate-700">{p.dueDate ?? "—"}</dd>
-                                  </div>
-                                </dl>
-                              </div>
-
-                              <div className="p-4">
-                                <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                                  Settlement
-                                </p>
-                                <dl className="mt-2 flex flex-col gap-1.5 text-xs">
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Paid by client</dt>
-                                    <dd className="font-medium text-slate-700">
-                                      {p.clientPaidAt ? new Date(p.clientPaidAt).toLocaleDateString() : "—"}
-                                    </dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Picked up by</dt>
-                                    <dd className="font-medium text-slate-700">{p.orgPickedUpBy ?? "—"}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">Paid by</dt>
-                                    <dd className="font-medium text-slate-700">{p.orgPaidBy ?? "—"}</dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">BBPS txn.</dt>
-                                    <dd className="font-mono font-medium text-slate-700">
-                                      {p.bbpsTransactionId ?? "—"}
-                                    </dd>
-                                  </div>
-                                  <div className="flex justify-between gap-4">
-                                    <dt className="text-slate-500">External txn.</dt>
-                                    <dd className="font-mono font-medium text-slate-700">
-                                      {p.externalTransactionId ?? "—"}
-                                    </dd>
-                                  </div>
-                                </dl>
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/50 px-4 py-3">
-                              <span className="text-xs text-slate-400">
-                                {p.billPayFailureReason ? (
-                                  <span className="font-medium text-rose-600">
-                                    {p.billPayFailureReason}
-                                  </span>
-                                ) : (
-                                  `Created ${new Date(p.createdAt).toLocaleString()}`
-                                )}
-                              </span>
-                              <StatusBadge status={p.orgStatus} />
-                            </div>
-                          </div>
-                        </TD>
-                      </TR>
-                    )}
-                  </Fragment>
-                );
-              })}
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => openFetchDetailsModal(bill)}
+                            className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Eye size={14} className="text-slate-400" />
+                            View fetch details
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </TD>
+                </TR>
+              ))}
             </TBody>
           </Table>
         )}
       </ListCard>
+
+      <CreateBillModal
+        open={createOpen}
+        clientId={clientId}
+        branches={branches}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          setCreateOpen(false);
+          loadBills(true);
+          window.setTimeout(() => loadBills(true), 3000);
+        }}
+      />
+
+      <Modal
+        open={selectedBillForFetch !== null}
+        onClose={() => setSelectedBillForFetch(null)}
+        title="Bill fetch details"
+        description={
+          selectedBillForFetch
+            ? `${selectedBillForFetch.billerName} · ${selectedBillForFetch.customerBillAccountNumber}`
+            : undefined
+        }
+      >
+        {fetchLoading ? (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : !selectedBillForFetch?.latestBillFetchId || !fetchDetails ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-center">
+            <p className="text-sm font-semibold text-slate-800">No fetch record available</p>
+            <p className="mt-1 text-xs text-slate-500">
+              This bill does not have a latest fetch record in the bill fetch table yet.
+            </p>
+          </div>
+        ) : (
+          <dl className="grid grid-cols-1 gap-x-4 gap-y-3.5 rounded-xl border border-slate-200 bg-white p-4 text-xs sm:grid-cols-2">
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Consumer name</dt>
+              <dd className="mt-1 text-sm font-semibold text-slate-900">
+                {fetchDetails.billConsumerName || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Bill amount</dt>
+              <dd className="mt-1 font-mono text-sm font-bold text-slate-900">
+                {fetchDetails.billAmount != null
+                  ? `₹${fetchDetails.billAmount.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`
+                  : "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Bill status</dt>
+              <dd className="mt-1">
+                {fetchDetails.billStatus ? (
+                  <StatusBadge status={fetchDetails.billStatus} />
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Payment status</dt>
+              <dd className="mt-1">
+                {fetchDetails.billPaymentStatus ? (
+                  <StatusBadge status={fetchDetails.billPaymentStatus} />
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Bill cycle</dt>
+              <dd className="mt-1 font-medium text-slate-800">
+                {fetchDetails.billCycle || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Generated date</dt>
+              <dd className="mt-1 font-medium text-slate-800">
+                {formatDate(fetchDetails.billGeneratedDate)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Due date</dt>
+              <dd className="mt-1 font-medium text-slate-800">
+                {formatDate(fetchDetails.billDueDate)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Fetch status</dt>
+              <dd className="mt-1">
+                {fetchDetails.fetchStatus ? (
+                  <StatusBadge status={fetchDetails.fetchStatus} />
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Provider</dt>
+              <dd className="mt-1 font-mono font-medium text-slate-700">
+                {fetchDetails.fetchProvider || "—"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-[11px] font-medium text-slate-400">Fetched on</dt>
+              <dd className="mt-1 font-medium text-slate-800">
+                {formatDateTime(fetchDetails.fetchedOn)}
+              </dd>
+            </div>
+            {fetchDetails.fetchRemarks && (
+              <div className="sm:col-span-2">
+                <dt className="text-[11px] font-medium text-slate-400">Fetch remarks</dt>
+                <dd className="mt-1 rounded-lg bg-slate-50 px-3 py-2 text-slate-700">
+                  {fetchDetails.fetchRemarks}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+      </Modal>
     </div>
   );
 }

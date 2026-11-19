@@ -1,4 +1,5 @@
 export type Role =
+  | "SUPER_ADMIN"
   | "ORGANISATION_ADMIN"
   | "MAKER"
   | "CHECKER"
@@ -7,6 +8,10 @@ export type Role =
   | "CLIENT_ADMIN"
   | "CLIENT_OPERATOR"
   | "BRANCH_USER";
+
+export function isOrgAdmin(role: Role | string | null | undefined): boolean {
+  return role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN";
+}
 
 export interface UserProfile {
   userId: string;
@@ -17,6 +22,7 @@ export interface UserProfile {
   tenantSchema: string | null;
   clientId: string | null;
   branchId: string | null;
+  clientType?: ClientType | null;
 }
 
 export interface LoginResponse {
@@ -24,64 +30,6 @@ export interface LoginResponse {
   tokenType: string;
   expiresInSeconds: number;
   user: UserProfile;
-}
-
-export interface OrganisationSummary {
-  id: string;
-  organisationCode: string;
-  organisationName: string;
-  tenantSchema: string;
-  status: string;
-  createdAt: string;
-}
-
-export interface PlatformOrganisationUser {
-  userId: string;
-  displayName: string;
-  phoneNumber: string;
-  email: string | null;
-  role: string;
-  status: string;
-  createdAt: string;
-}
-
-export interface PlatformOrganisationUserDetail extends PlatformOrganisationUser {
-  organisationId: string;
-  organisationName: string;
-  clientId: string | null;
-  clientName: string | null;
-  clientCode: string | null;
-}
-
-export interface PlatformOrganisationClient {
-  id: string;
-  clientName: string;
-  clientCode: string | null;
-  clientType: ClientType;
-  status: "PENDING" | "ACTIVE" | "SUSPENDED" | "TERMINATED";
-  contactPhone: string | null;
-  createdAt: string;
-  admin: PlatformOrganisationUser | null;
-}
-
-export interface PlatformOrganisationDetail extends OrganisationSummary {
-  admin: PlatformOrganisationUser | null;
-  staff: PlatformOrganisationUser[];
-  clients: PlatformOrganisationClient[];
-  clientCount: number;
-  staffCount: number;
-  billsPendingPickup: number;
-  billsInProcess: number;
-  billsPaid: number;
-  totalGmv: number;
-}
-
-export interface BillerService {
-  id: string;
-  serviceCode: string;
-  serviceName: string;
-  category: string;
-  active: boolean;
 }
 
 export interface OrganisationMe {
@@ -100,6 +48,8 @@ export interface Client {
   id: string;
   clientName: string;
   clientCode: string | null;
+  contactPersonName?: string | null;
+  contactEmail?: string | null;
   contactPhone: string | null;
   clientType: ClientType;
   corporateKind?: CorporateKind | null;
@@ -189,24 +139,21 @@ export interface AssignedCorporate {
   status: string;
 }
 
-export interface OrganisationBillServiceConfig {
-  billServiceCode: string;
-  billServiceName: string;
-  enabled: boolean;
-}
-
-export interface ClientBillServiceConfig {
-  billServiceCode: string;
-  enabled: boolean;
+export interface UserBranch {
+  id: string;
+  name: string;
+  code: string | null;
 }
 
 export interface ClientUser {
   id: string;
   phoneNumber: string;
+  email?: string | null;
   userCode: string;
   fullName: string;
   role: string;
   status: "ACTIVE" | "SUSPENDED";
+  branches?: UserBranch[];
 }
 
 export interface ApprovalRule {
@@ -275,6 +222,23 @@ export interface ManagedBill {
   updatedAt: string;
   branchId?: string | null;
   branchName?: string | null;
+  latestBillFetchId?: string | null;
+}
+
+export interface BillFetchRecord {
+  billFetchId: string;
+  billId: string;
+  billAmount: number | null;
+  billCycle: string | null;
+  billDueDate: string | null;
+  billGeneratedDate: string | null;
+  billConsumerName: string | null;
+  billStatus: string | null;
+  billPaymentStatus: string | null;
+  fetchedOn: string | null;
+  fetchStatus: string | null;
+  fetchRemarks: string | null;
+  fetchProvider: string | null;
 }
 
 /** One fetch/payment cycle for a bill - what My Payments (client and organisation side) lists. */
@@ -384,11 +348,17 @@ export interface BillActivityLogEntry {
     | "FETCH_FAILED_PERMANENT"
     | "CLIENT_PAID"
     | "ASSIGNED"
+    | "VENDOR_IN_PROGRESS"
     | "VENDOR_MARKED_PAID"
     | "VENDOR_REJECTED"
+    | "BBPS_VERIFIED"
+    | "BBPS_STILL_DUE"
+    | "VENDOR_REIMBURSED"
+    | "COMMISSION_CLOSED"
     | "ORG_PICKED_UP"
     | "ORG_PAID"
-    | "ORG_MARK_FAILED";
+    | "ORG_MARK_FAILED"
+    | (string & {});
   description: string | null;
   actor: string | null;
   createdAt: string;
@@ -432,6 +402,7 @@ export interface WalletTopup {
   createdBy?: string | null;
   approvedBy?: string | null;
   approvedOn?: string | null;
+  canReview?: boolean;
 }
 
 /** Same as WalletTopup, plus which client it's for - only returned by Paytrix-wide pending list. */
@@ -511,12 +482,6 @@ export interface AuditLogEntry {
   createdAt: string;
 }
 
-export interface PlatformAnalytics {
-  organisationCount: number;
-  totalBillsPaid: number;
-  totalGmv: number;
-}
-
 export interface OrganisationAnalytics {
   clientCount: number;
   billsPendingPickup: number;
@@ -536,6 +501,8 @@ export interface ClientAnalytics {
   completedBills: number;
   completedAmount: number;
   walletBalance: number;
+  branchCount?: number;
+  userCount?: number;
 }
 
 export interface BulkRowResult {
@@ -640,23 +607,13 @@ export interface SpendByServiceRow {
   amount: number;
 }
 
-export interface OrganisationPortfolioRow {
-  organisationId: string;
-  organisationCode: string;
-  organisationName: string;
-  status: string;
-  createdAt: string;
-  clientCount: number;
-  staffCount: number;
-  totalGmv: number;
-}
-
-export interface OrganisationGmvRow {
-  organisationId: string;
-  organisationCode: string;
-  organisationName: string;
-  billsPaid: number;
-  totalAmount: number;
+export function isVendorUser(
+  user: Pick<UserProfile, "clientId" | "clientType"> | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (user.clientType === "VENDOR") return true;
+  if (user.clientType === "CORPORATE") return false;
+  return Boolean(user.clientId && user.clientId.startsWith("VD"));
 }
 
 /** Which top-level module a role lands in after login. */
@@ -665,8 +622,16 @@ export function moduleForRole(role: Role): "paytrix" | "client" {
   return "paytrix";
 }
 
-/** First page after login. Sales opens their own dashboard, not the Paytrix one. */
+/** First page after login. Sales opens their own dashboard; vendors open /vendor/dashboard. */
 export function homeForRole(role: Role): string {
   if (role === "SALES") return "/paytrix/sales";
   return `/${moduleForRole(role)}/dashboard`;
+}
+
+export function homeForUser(
+  user: Pick<UserProfile, "role" | "clientId" | "clientType">,
+): string {
+  if (user.role === "SALES") return "/paytrix/sales";
+  if (isVendorUser(user)) return "/vendor/dashboard";
+  return homeForRole(user.role);
 }

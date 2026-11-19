@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api-client";
-import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Field, SelectField } from "@/components/ui/Field";
+import { Field, SearchableSelect } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 
-type Category = { categoryId: string; name: string; enabled: boolean };
+const DEFAULT_CATEGORY_ID = "Electricity";
+
 type Biller = { billerId: string; name: string; categoryId: string };
 type BillerList = { billers: Biller[]; searchRequired: boolean };
 type Parameter = {
@@ -43,9 +43,7 @@ export function CreateBillModal({
   fixedBranchId?: string;
 }) {
   const toast = useToast();
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [optionsLoading, setOptionsLoading] = useState(true);
-  const [categoryId, setCategoryId] = useState("");
+  const categoryId = DEFAULT_CATEGORY_ID;
 
   const [billers, setBillers] = useState<Biller[]>([]);
   const [billersLoading, setBillersLoading] = useState(false);
@@ -65,7 +63,6 @@ export function CreateBillModal({
 
   useEffect(() => {
     if (!open) return;
-    setCategoryId("");
     setBillers([]);
     setSearchRequired(false);
     setBillerId("");
@@ -75,31 +72,13 @@ export function CreateBillModal({
     setValues({});
     setMobileNumber("");
     setBranchId(fixedBranchId ?? "");
-    let cancelled = false;
-    setOptionsLoading(true);
-    apiFetch<Category[]>("/api/v1/client/bbps/categories")
-      .then((nextCategories) => {
-        if (!cancelled) setCategories(nextCategories);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          toast.error(err instanceof ApiError ? err.message : "Failed to load categories");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setOptionsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
 
-  useEffect(() => {
-    if (!open || !categoryId) return;
     const seq = ++requestSeq.current;
     let cancelled = false;
     setBillersLoading(true);
-    apiFetch<BillerList>(`/api/v1/client/bbps/billers?categoryId=${encodeURIComponent(categoryId)}`)
+    apiFetch<BillerList>(
+      `/api/v1/client/bbps/billers?categoryId=${encodeURIComponent(categoryId)}&clientId=${encodeURIComponent(clientId)}`,
+    )
       .then((result) => {
         if (cancelled || seq !== requestSeq.current) return;
         setBillers(result.billers);
@@ -117,7 +96,7 @@ export function CreateBillModal({
     return () => {
       cancelled = true;
     };
-  }, [open, categoryId]);
+  }, [open, categoryId, clientId, fixedBranchId, toast]);
 
   useEffect(() => {
     if (!open || !categoryId || !searchRequired) return;
@@ -131,7 +110,7 @@ export function CreateBillModal({
     const handle = window.setTimeout(() => {
       setBillersLoading(true);
       apiFetch<BillerList>(
-        `/api/v1/client/bbps/billers?categoryId=${encodeURIComponent(categoryId)}&q=${encodeURIComponent(query)}`,
+        `/api/v1/client/bbps/billers?categoryId=${encodeURIComponent(categoryId)}&q=${encodeURIComponent(query)}&clientId=${encodeURIComponent(clientId)}`,
       )
         .then((result) => {
           if (seq !== requestSeq.current) return;
@@ -148,17 +127,9 @@ export function CreateBillModal({
         });
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [open, categoryId, searchRequired, billerQuery]);
-
-  const visibleBillers = useMemo(() => {
-    if (searchRequired) return billers;
-    const query = billerQuery.trim().toLowerCase();
-    if (!query) return billers;
-    return billers.filter((biller) => biller.name.toLowerCase().includes(query));
-  }, [billers, billerQuery, searchRequired]);
+  }, [open, categoryId, searchRequired, billerQuery, clientId, toast]);
 
   const parametersReady =
-    categoryId !== "" &&
     billerId !== "" &&
     !parametersLoading &&
     parameterError == null &&
@@ -166,27 +137,16 @@ export function CreateBillModal({
     parameters.every((parameter) => (values[parameter.name] ?? "").trim().length > 0) &&
     /^[6-9][0-9]{9}$/.test(mobileNumber);
 
-  function selectCategory(nextId: string) {
-    setCategoryId(nextId);
-    setBillerQuery("");
-    setSearchRequired(false);
-    setBillers([]);
-    setBillersLoading(nextId !== "");
-    setBillerId("");
-    setParameters([]);
-    setParameterError(null);
-    setValues({});
-  }
-
   async function chooseBiller(nextId: string) {
     setBillerId(nextId);
     setParameters([]);
     setValues({});
     setParameterError(null);
+    if (!nextId) return;
     setParametersLoading(true);
     try {
       const rows = await apiFetch<Parameter[]>(
-        `/api/v1/client/bbps/billers/${encodeURIComponent(nextId)}/parameters?categoryId=${encodeURIComponent(categoryId)}`,
+        `/api/v1/client/bbps/billers/${encodeURIComponent(nextId)}/parameters?categoryId=${encodeURIComponent(categoryId)}&clientId=${encodeURIComponent(clientId)}`,
       );
       setParameters(rows);
     } catch (err) {
@@ -220,136 +180,112 @@ export function CreateBillModal({
     }
   }
 
-  const queryReady = billerQuery.trim().length >= 2;
-  const operatorMessage = !categoryId
-    ? null
-    : billersLoading
-      ? "Loading operators..."
-      : searchRequired && !queryReady
-        ? "Type at least 2 characters to search operators."
-        : visibleBillers.length === 0
-          ? billers.length === 0
-            ? "No operators for this category."
-            : "No operators match."
-          : null;
-
   return (
     <Modal
       open={open}
       onClose={onClose}
       title="Create a managed bill"
-      description="Choose a category, then the operator. Fill in the fields it asks for, and the mobile number sent with the fetch."
+      description={
+        needsBranch
+          ? "Select the branch and electricity operator, then fill in the fields it asks for and the mobile number sent with the fetch."
+          : "Select the electricity operator, then fill in the fields it asks for and the mobile number sent with the fetch."
+      }
       footer={
         <>
           <Button variant="outline" onClick={onClose} disabled={creating}>
             Cancel
           </Button>
-          <Button form="create-managed-bill-form" type="submit" loading={creating} disabled={!parametersReady || (needsBranch && !branchId)}>
+          <Button
+            form="create-managed-bill-form"
+            type="submit"
+            loading={creating}
+            disabled={!parametersReady || (needsBranch && !branchId)}
+          >
             Create bill
           </Button>
         </>
       }
     >
       <form id="create-managed-bill-form" onSubmit={create} className="flex flex-col gap-4">
-        {optionsLoading ? (
-          <p className="text-sm text-slate-500">Loading categories...</p>
-        ) : (
-          <>
-            {needsBranch && (branches ?? []).length === 0 && (
-              <p className="text-sm text-slate-500">Create a branch before registering a bill.</p>
-            )}
-            {needsBranch && (
-              <SelectField
-                label="Branch"
-                value={branchId}
-                onChange={(e) => setBranchId(e.target.value)}
-              >
-                <option value="">Choose a branch</option>
-                {(branches ?? []).map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </SelectField>
-            )}
-            <SelectField
-              label="Category"
-              required
-              value={categoryId}
-              onChange={(e) => selectCategory(e.target.value)}
-              hint={categories.length === 0 ? "No categories are enabled for this client yet." : undefined}
-            >
-              <option value="">Select a category...</option>
-              {categories.map((category) => (
-                <option key={category.categoryId} value={category.categoryId}>
-                  {category.name}
-                </option>
-              ))}
-            </SelectField>
-          </>
+        {needsBranch && (branches ?? []).length === 0 && (
+          <p className="text-sm text-slate-500">Create a branch before registering a bill.</p>
+        )}
+        {needsBranch && (
+          <SearchableSelect
+            label="Branch"
+            value={branchId}
+            onChange={setBranchId}
+            placeholder="Choose a branch..."
+            searchPlaceholder="Search branches..."
+            emptyMessage={
+              (branches ?? []).length === 0
+                ? "No branches available. Create a branch first."
+                : "No branches match your search."
+            }
+            options={(branches ?? []).map((branch) => ({
+              value: branch.id,
+              label: branch.name,
+            }))}
+          />
         )}
 
-        {categoryId && (
-          <>
-            <Field
-              label="Search operators"
-              value={billerQuery}
-              onChange={(e) => setBillerQuery(e.target.value)}
-              placeholder={searchRequired ? "Type at least 2 characters" : "Type an operator name"}
-            />
-            <div className="max-h-48 overflow-auto rounded-xl border border-slate-200">
-              {operatorMessage ? (
-                <p className="px-3 py-4 text-sm text-slate-500">{operatorMessage}</p>
-              ) : (
-                <ul>
-                  {visibleBillers.map((biller) => {
-                    const selected = biller.billerId === billerId;
-                    return (
-                      <li key={biller.billerId}>
-                        <button
-                          type="button"
-                          onClick={() => chooseBiller(biller.billerId)}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm",
-                            selected ? "bg-indigo-50 font-semibold text-indigo-900" : "text-slate-800 hover:bg-slate-50",
-                          )}
-                        >
-                          <span className="min-w-0 truncate">{biller.name?.trim() || `Operator ${biller.billerId}`}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+        <SearchableSelect
+          label="Operator"
+          value={billerId}
+          onChange={chooseBiller}
+          loading={billersLoading}
+          placeholder={
+            billersLoading && billers.length === 0
+              ? "Loading electricity operators..."
+              : "Select an electricity operator..."
+          }
+          searchPlaceholder={
+            searchRequired
+              ? "Type at least 2 characters to search operators..."
+              : "Search electricity operators..."
+          }
+          emptyMessage={
+            searchRequired && billerQuery.trim().length < 2
+              ? "Type at least 2 characters to search operators."
+              : "No electricity operators match your search."
+          }
+          options={billers.map((biller) => ({
+            value: biller.billerId,
+            label: biller.name?.trim() || `Operator ${biller.billerId}`,
+          }))}
+          onSearchChange={searchRequired ? setBillerQuery : undefined}
+          disableClientFilter={searchRequired}
+        />
 
-            {parametersLoading && <p className="text-sm text-slate-500">Loading the fields this operator needs...</p>}
-            {parameterError && <p className="text-sm text-rose-700">{parameterError}</p>}
-            {billerId && !parametersLoading && !parameterError && parameters.length > 0 && (
-              <div className="flex flex-col gap-4 border-t border-slate-100 pt-4">
-                {parameters.map((parameter) => (
-                  <Field
-                    key={parameter.name}
-                    label={parameter.label || parameter.name}
-                    required
-                    type={inputType(parameter)}
-                    value={values[parameter.name] ?? ""}
-                    hint={parameter.errorMessage ?? undefined}
-                    onChange={(e) => setValues((current) => ({ ...current, [parameter.name]: e.target.value }))}
-                  />
-                ))}
-                <Field
-                  label="Mobile number"
-                  required
-                  inputMode="numeric"
-                  maxLength={10}
-                  value={mobileNumber}
-                  hint="Sent with every bill fetch. Use a 10-digit mobile starting with 6, 7, 8, or 9."
-                  onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                />
-              </div>
-            )}
-          </>
+        {parametersLoading && (
+          <p className="text-sm text-slate-500">Loading the fields this operator needs...</p>
+        )}
+        {parameterError && <p className="text-sm text-rose-700">{parameterError}</p>}
+        {billerId && !parametersLoading && !parameterError && parameters.length > 0 && (
+          <div className="flex flex-col gap-4 border-t border-slate-100 pt-4">
+            {parameters.map((parameter) => (
+              <Field
+                key={parameter.name}
+                label={parameter.label || parameter.name}
+                required
+                type={inputType(parameter)}
+                value={values[parameter.name] ?? ""}
+                hint={parameter.errorMessage ?? undefined}
+                onChange={(e) =>
+                  setValues((current) => ({ ...current, [parameter.name]: e.target.value }))
+                }
+              />
+            ))}
+            <Field
+              label="Mobile number"
+              required
+              inputMode="numeric"
+              maxLength={10}
+              value={mobileNumber}
+              hint="Sent with every bill fetch. Use a 10-digit mobile starting with 6, 7, 8, or 9."
+              onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, "").slice(0, 10))}
+            />
+          </div>
         )}
       </form>
     </Modal>

@@ -36,10 +36,12 @@ export function TableSkeleton({
 
 export function StatCardSkeleton() {
   return (
-    <div className="rounded-2xl border border-border-subtle bg-surface p-5">
-      <Skeleton className="h-8 w-8 rounded-lg" />
-      <Skeleton className="mt-4 h-3 w-20" />
-      <Skeleton className="mt-2 h-6 w-16" />
+    <div className="flex items-center gap-3 rounded-xl border border-border-subtle bg-surface px-3.5 py-2.5">
+      <Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
+      <div className="flex-1">
+        <Skeleton className="h-2.5 w-20" />
+        <Skeleton className="mt-1.5 h-5 w-16" />
+      </div>
     </div>
   );
 }

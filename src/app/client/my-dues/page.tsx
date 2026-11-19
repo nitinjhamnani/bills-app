@@ -48,9 +48,10 @@ function inr(amount: number) {
 
 export default function ClientMyDuesPage() {
   const toast = useToast();
-  const clientId = getUser()?.clientId ?? "";
-  const role = getUser()?.role;
-  const canPay = role !== "BRANCH_USER";
+  const user = getUser();
+  const clientId = user?.clientId ?? "";
+  const role = user?.role;
+  const canPay = role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR";
   const showBranch = role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR";
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +70,10 @@ export default function ClientMyDuesPage() {
   const [amountMax, setAmountMax] = useState("");
 
   async function load() {
+    if (!clientId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       setPayments(await apiFetch<BillPayment[]>(`/api/v1/clients/${clientId}/my-dues`));
@@ -80,6 +85,7 @@ export default function ClientMyDuesPage() {
   }
 
   async function loadWalletBalance() {
+    if (!clientId || !canPay) return;
     try {
       const { walletBalance: balance } = await apiFetch<WalletBalance>(
         `/api/v1/clients/${clientId}/wallet`,
@@ -91,10 +97,12 @@ export default function ClientMyDuesPage() {
   }
 
   useEffect(() => {
+    if (!clientId) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     if (canPay) loadWalletBalance();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, canPay]);
 
   const categoryOptions = useMemo(() => {
     const map = new Map<string, string>();

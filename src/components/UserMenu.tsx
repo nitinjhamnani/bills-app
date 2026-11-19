@@ -16,6 +16,7 @@ export function userInitials(name: string) {
 }
 
 function profileHref(pathname: string) {
+  if (pathname.startsWith("/vendor")) return "/vendor/profile";
   if (pathname.startsWith("/client")) return "/client/profile";
   return "/paytrix/profile";
 }

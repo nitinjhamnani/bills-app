@@ -93,7 +93,13 @@ export default function OrganisationClientPortfolioReportPage() {
         emptyTitle="No clients yet"
         emptyDescription="Onboarded clients will show up here."
         rowKey={(c) => c.clientId}
-        onRowClick={(c) => router.push(`/paytrix/clients/${c.clientId}`)}
+        onRowClick={(c) =>
+          router.push(
+            c.clientType === "VENDOR" || c.clientId.startsWith("VD")
+              ? `/paytrix/vendors/${c.clientId}`
+              : `/paytrix/clients/${c.clientId}`,
+          )
+        }
         summary={[
           { label: "Wallet", value: formatInr(totals.wallet) },
           { label: "Outstanding", value: formatInr(totals.outstanding), tone: "danger" },

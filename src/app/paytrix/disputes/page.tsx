@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronRight, Search } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/StatusBadge";
 import { userInitials } from "@/components/UserMenu";
@@ -64,6 +65,8 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
 
 export default function DisputesPage() {
   const toast = useToast();
+  const role = getUser()?.role;
+  const canResolve = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN" || role === "CHECKER";
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Dispute | null>(null);
@@ -130,7 +133,7 @@ export default function DisputesPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
-        title="Disputes"
+        title="Bill Disputes"
         description="A valid dispute refunds the bill amount to the client's wallet."
       />
 
@@ -253,7 +256,7 @@ export default function DisputesPage() {
             : undefined
         }
         footer={
-          selected && isOpen(selected) ? (
+          canResolve && selected && isOpen(selected) ? (
             <>
               <Button variant="outline" onClick={() => setTarget({ id: selected.id, valid: false })}>
                 Dismiss

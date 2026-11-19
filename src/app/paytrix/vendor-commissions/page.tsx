@@ -49,7 +49,11 @@ function formatWhen(isoDate: string) {
 
 export default function VendorCommissionsPage() {
   const toast = useToast();
-  const canReceive = getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "CHECKER";
+  const currentRole = getUser()?.role;
+  const canReceive =
+    currentRole === "SUPER_ADMIN" ||
+    currentRole === "ORGANISATION_ADMIN" ||
+    currentRole === "CHECKER";
   const today = useMemo(() => new Date(), []);
   const [vendors, setVendors] = useState<Client[]>([]);
   const [vendorId, setVendorId] = useState("ALL");

@@ -23,7 +23,11 @@ function inr(amount: number) {
 
 export default function VendorPaymentsPage() {
   const toast = useToast();
-  const canPay = getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "CHECKER";
+  const currentRole = getUser()?.role;
+  const canPay =
+    currentRole === "SUPER_ADMIN" ||
+    currentRole === "ORGANISATION_ADMIN" ||
+    currentRole === "CHECKER";
   const [rows, setRows] = useState<BillPayment[]>([]);
   const [vendors, setVendors] = useState<Client[]>([]);
   const [vendorId, setVendorId] = useState("ALL");

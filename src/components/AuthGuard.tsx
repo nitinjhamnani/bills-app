@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getUser } from "@/lib/auth";
+import { clearSession, getToken, getUser } from "@/lib/auth";
 import { isWorkspaceEnabled } from "@/lib/workspace";
 import type { Role, UserProfile } from "@/lib/types";
 
@@ -23,7 +23,13 @@ export function AuthGuard({
 
   useEffect(() => {
     const current = getUser();
-    if (!isWorkspaceEnabled || !current || !allowedRoles.includes(current.role)) {
+    const token = getToken();
+    if (!isWorkspaceEnabled || !current || !token) {
+      if (!token && current) clearSession();
+      router.replace("/login");
+      return;
+    }
+    if (!allowedRoles.includes(current.role)) {
       router.replace("/login");
       return;
     }

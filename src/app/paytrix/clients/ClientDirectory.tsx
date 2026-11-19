@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, ChevronRight, Copy, Plus, Search } from "lucide-react";
+import { Building2, Check, ChevronRight, Copy, Mail, Phone, Plus, Search, UserRound } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/StatusBadge";
 import { onboardingStatus } from "@/lib/onboarding-status";
@@ -30,14 +31,6 @@ interface CreatedClientCredentials {
   openingBalance?: number;
 }
 
-function parseOpeningBalance(raw: string): number | undefined {
-  const trimmed = raw.trim();
-  if (!trimmed) return undefined;
-  const value = Number(trimmed);
-  if (!Number.isFinite(value) || value < 0) return undefined;
-  return Math.round(value * 100) / 100;
-}
-
 function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -47,44 +40,40 @@ const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   VENDOR: "Vendor",
 };
 
-const STATUS_FILTERS = [
-  { key: "ALL", label: "All" },
-  { key: "PENDING", label: "Pending" },
-  { key: "ACTIVE", label: "Active" },
-  { key: "SUSPENDED", label: "Suspended" },
-  { key: "TERMINATED", label: "Terminated" },
-] as const;
-
-type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
-
 function clientInitials(name: string) {
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "C";
 }
 
-function formatOnboarded(iso: string | null | undefined) {
+function formatOnboardedDateTime(iso: string | null | undefined) {
   if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("en-IN", {
+  return date.toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
 export function ClientDirectory({ clientType }: { clientType: ClientType }) {
   const toast = useToast();
   const router = useRouter();
+  const role = getUser()?.role;
+  const isAdmin = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN";
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [createdClient, setCreatedClient] =
     useState<CreatedClientCredentials | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     clientName: "",
+    contactPersonName: "",
     phoneNumber: "",
     email: "",
     password: "",
@@ -117,32 +106,23 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
     e.preventDefault();
     setSubmitting(true);
     try {
-      const openingBalance = clientType === "VENDOR" ? undefined : parseOpeningBalance(form.openingBalance);
       const created = await apiFetch<Client>("/api/v1/paytrix/clients", {
         method: "POST",
         body: {
-          clientName: form.clientName,
+          clientName: form.clientName.trim(),
+          contactPersonName: form.contactPersonName.trim(),
+          email: form.email.trim(),
           phoneNumber: form.phoneNumber,
-          email: form.email || undefined,
-          password: form.password,
           clientType,
-          corporateKind: clientType === "CORPORATE" ? form.corporateKind : undefined,
-          openingBalance,
+          corporateKind: form.corporateKind,
         },
       });
-      toast.success(`${form.clientName} onboarded`);
-      setCreatedClient({
-        id: created.id,
-        clientName: form.clientName,
-        clientCode: created.clientCode,
-        clientType,
-        phoneNumber: form.phoneNumber,
-        email: form.email,
-        password: form.password,
-        openingBalance,
-      });
+      toast.success(
+        `${created.clientName} created — complete verification and agreement signing to activate`,
+      );
       setForm({
         clientName: "",
+        contactPersonName: "",
         phoneNumber: "",
         email: "",
         password: "",
@@ -151,6 +131,11 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
       });
       setModalOpen(false);
       await load();
+      router.push(
+        clientType === "VENDOR"
+          ? `/paytrix/vendors/${created.id}`
+          : `/paytrix/clients/${created.id}`,
+      );
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "Failed to create client",
@@ -191,37 +176,31 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
     }
   }
 
-  function goToServicesTab() {
+  function openCreatedClient() {
     if (!createdClient) return;
-    router.push(`/paytrix/clients/${createdClient.id}?tab=services`);
+    router.push(
+      createdClient.clientType === "VENDOR"
+        ? `/paytrix/vendors/${createdClient.id}`
+        : `/paytrix/clients/${createdClient.id}`,
+    );
     setCreatedClient(null);
   }
 
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const searchedClients = clients.filter((c) => {
+  const filteredClients = clients.filter((c) => {
     const query = search.trim().toLowerCase();
     if (!query) return true;
     return (
       c.clientName.toLowerCase().includes(query) ||
       (c.clientCode ?? "").toLowerCase().includes(query) ||
+      (c.contactPersonName ?? "").toLowerCase().includes(query) ||
+      (c.contactEmail ?? "").toLowerCase().includes(query) ||
       (c.contactPhone ?? "").includes(query)
     );
   });
-  const counts = {
-    ALL: searchedClients.length,
-    PENDING: searchedClients.filter((c) => c.status === "PENDING").length,
-    ACTIVE: searchedClients.filter((c) => c.status === "ACTIVE").length,
-    SUSPENDED: searchedClients.filter((c) => c.status === "SUSPENDED").length,
-    TERMINATED: searchedClients.filter((c) => c.status === "TERMINATED").length,
-  };
-  const filteredClients =
-    statusFilter === "ALL"
-      ? searchedClients
-      : searchedClients.filter((c) => c.status === statusFilter);
 
   const totalPages = Math.ceil(filteredClients.length / pageSize);
   const pagedClients = filteredClients.slice(
@@ -242,43 +221,13 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
             : "Companies that settle bills for Paytrix."
         }
         actions={
-          <Button icon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
-            {onboardLabel}
-          </Button>
+          isAdmin ? (
+            <Button icon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
+              {onboardLabel}
+            </Button>
+          ) : undefined
         }
       />
-
-      <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-        {STATUS_FILTERS.map((item) => {
-          const active = statusFilter === item.key;
-          return (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => {
-                setStatusFilter(item.key);
-                setCurrentPage(1);
-              }}
-              className={cn(
-                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
-                active
-                  ? "bg-white text-slate-900 shadow-sm"
-                  : "text-slate-500 hover:text-slate-800",
-              )}
-            >
-              {item.label}
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
-                )}
-              >
-                {counts[item.key]}
-              </span>
-            </button>
-          );
-        })}
-      </div>
 
       <ListCard fitContent={false}>
         <div className="shrink-0 border-b border-slate-100 px-4 py-3">
@@ -301,7 +250,7 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
         </div>
 
         {loading ? (
-          <TableSkeleton cols={corporate ? 7 : 6} />
+          <TableSkeleton cols={6} />
         ) : filteredClients.length === 0 ? (
           <EmptyState
             icon={Building2}
@@ -309,12 +258,12 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
             description={
               clients.length === 0
                 ? corporate
-                  ? "Onboard a corporate to give them a wallet and a first admin."
-                  : "Onboard a vendor. A vendor does not have a wallet."
+                  ? "Onboard a corporate with basic contact details to begin verification and agreement signing."
+                  : "Onboard a vendor with basic contact details to begin verification and agreement signing."
                 : "Try another status or clear the search."
             }
             action={
-              clients.length === 0 ? (
+              isAdmin && clients.length === 0 ? (
                 <Button icon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
                   {onboardLabel}
                 </Button>
@@ -327,67 +276,100 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
               <THead
                 columns={
                   corporate
-                    ? ["Code", "Name", "Branches", "Sales person", "Status", ""]
-                    : ["Vendor", "Code", "Phone", "Status", "Onboarded", ""]
+                    ? ["Corporate", "Code", "Contact person", "Status", "Onboarded", ""]
+                    : ["Vendor", "Code", "Contact person", "Status", "Onboarded", ""]
                 }
               />
               <TBody>
-                {pagedClients.map((client) => (
-                  <TR
-                    key={client.id}
-                    className="cursor-pointer"
-                    onClick={() => router.push(`/paytrix/clients/${client.id}`)}
-                  >
-                    {corporate ? (
-                      <TD className="font-mono text-xs font-medium text-slate-600">
-                        {client.clientCode ?? "—"}
-                      </TD>
-                    ) : (
+                {pagedClients.map((client) => {
+                  const code = client.clientCode ?? client.id;
+                  return (
+                    <TR
+                      key={client.id}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        router.push(
+                          corporate
+                            ? `/paytrix/clients/${client.id}`
+                            : `/paytrix/vendors/${client.id}`,
+                        )
+                      }
+                    >
                       <TD>
                         <div className="flex items-center gap-3">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
                             {clientInitials(client.clientName)}
                           </span>
-                          <p className="truncate font-semibold text-slate-900">{client.clientName}</p>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">
+                              {client.clientName}
+                            </p>
+                            <p className="text-[11px] font-medium text-slate-400">
+                              {client.corporateKind === "INDIVIDUAL" ? "Individual" : "Company"}
+                            </p>
+                          </div>
                         </div>
                       </TD>
-                    )}
-                    {corporate ? (
+                      <TD onClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          title="Copy code"
+                          onClick={async () => {
+                            try {
+                              await navigator.clipboard.writeText(code);
+                              setCopiedCodeId(client.id);
+                              toast.success(`Copied ${code}`);
+                              setTimeout(() => setCopiedCodeId(null), 1500);
+                            } catch {
+                              toast.error("Could not copy code");
+                            }
+                          }}
+                          className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 -ml-1.5 font-mono text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                        >
+                          <span>{code}</span>
+                          {copiedCodeId === client.id ? (
+                            <Check size={12} className="text-emerald-600" />
+                          ) : (
+                            <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                          )}
+                        </button>
+                      </TD>
                       <TD>
-                        <p className="font-semibold text-slate-900">{client.clientName}</p>
-                        <p className="text-[11px] font-medium text-slate-400">
-                          {client.corporateKind === "INDIVIDUAL" ? "Individual" : "Company"}
+                        <p className="font-semibold text-slate-900">
+                          {client.contactPersonName || "—"}
                         </p>
+                        {(client.contactPhone || client.contactEmail) && (
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
+                            {client.contactPhone && (
+                              <span className="inline-flex items-center gap-1 font-mono">
+                                <Phone size={11} className="text-slate-400" />
+                                {client.contactPhone}
+                              </span>
+                            )}
+                            {client.contactEmail && (
+                              <span className="inline-flex items-center gap-1">
+                                <Mail size={11} className="text-slate-400" />
+                                {client.contactEmail}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </TD>
-                    ) : (
-                      <TD className="font-mono text-xs font-medium text-slate-600">
-                        {client.clientCode ?? "—"}
-                      </TD>
-                    )}
-                    {corporate ? (
-                      <TD className="font-semibold text-slate-800">{client.branchCount ?? 0}</TD>
-                    ) : (
-                      <TD className="font-mono text-xs text-slate-600">{client.contactPhone ?? "—"}</TD>
-                    )}
-                    {corporate ? (
-                      <TD className="text-slate-700">{client.salesPersonName ?? "None"}</TD>
-                    ) : (
                       <TD>
-                        <StatusBadge status={onboardingStatus(client).code} label={onboardingStatus(client).label} />
+                        <StatusBadge
+                          status={onboardingStatus(client).code}
+                          label={onboardingStatus(client).label}
+                        />
                       </TD>
-                    )}
-                    {corporate ? (
+                      <TD className="text-xs text-slate-500">
+                        {formatOnboardedDateTime(client.createdAt)}
+                      </TD>
                       <TD>
-                        <StatusBadge status={onboardingStatus(client).code} label={onboardingStatus(client).label} />
+                        <ChevronRight size={16} className="ml-auto text-slate-300" />
                       </TD>
-                    ) : (
-                      <TD className="text-slate-500">{formatOnboarded(client.createdAt)}</TD>
-                    )}
-                    <TD>
-                      <ChevronRight size={16} className="ml-auto text-slate-300" />
-                    </TD>
-                  </TR>
-                ))}
+                    </TR>
+                  );
+                })}
               </TBody>
             </Table>
 
@@ -412,8 +394,8 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
         title={onboardLabel}
         description={
           corporate
-            ? "Creates the corporate, their first admin, and an optional opening wallet balance."
-            : "Creates the vendor and their first admin."
+            ? "Add basic details to create the corporate for business verification and agreement signing."
+            : "Add basic details to create the vendor for business verification and agreement signing."
         }
         footer={
           <>
@@ -426,98 +408,113 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
           </>
         }
       >
-        <form id="create-client-form" onSubmit={handleCreate} className="flex flex-col gap-6">
-          <section className="flex flex-col gap-4">
-            <h3 className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-              {title.slice(0, -1)}
-            </h3>
-            <Field
-              label={corporate ? "Corporate name" : "Vendor name"}
-              required
-              value={form.clientName}
-              onChange={(e) => setForm({ ...form, clientName: e.target.value })}
-              placeholder={corporate ? "Meridian Facilities" : "Harbor Utilities"}
-            />
-            {corporate && (
-              <div>
-                <p className="text-sm font-medium text-slate-700">Kind</p>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  {(["COMPANY", "INDIVIDUAL"] as const).map((kind) => {
-                    const selected = form.corporateKind === kind;
-                    return (
-                      <button
-                        key={kind}
-                        type="button"
-                        onClick={() => setForm({ ...form, corporateKind: kind })}
+        <form id="create-client-form" onSubmit={handleCreate} className="flex flex-col gap-5">
+          <div>
+            <p className="text-sm font-medium text-slate-700">Type</p>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              {(
+                [
+                  {
+                    kind: "COMPANY" as const,
+                    title: "Company",
+                    subtitle: "Registered business or enterprise",
+                    icon: Building2,
+                  },
+                  {
+                    kind: "INDIVIDUAL" as const,
+                    title: "Individual",
+                    subtitle: "Sole proprietor or individual",
+                    icon: UserRound,
+                  },
+                ]
+              ).map(({ kind, title: cardTitle, subtitle, icon: Icon }) => {
+                const selected = form.corporateKind === kind;
+                return (
+                  <button
+                    key={kind}
+                    type="button"
+                    onClick={() => setForm({ ...form, corporateKind: kind })}
+                    className={cn(
+                      "group flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 text-left transition-all",
+                      selected
+                        ? "border-indigo-400 bg-indigo-50/70 ring-2 ring-indigo-500/20"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/60",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+                        selected
+                          ? "bg-indigo-600 text-white shadow-xs"
+                          : "bg-slate-100 text-slate-600 group-hover:bg-slate-200/70",
+                      )}
+                    >
+                      <Icon size={19} />
+                    </span>
+                    <span className="min-w-0">
+                      <span
                         className={cn(
-                          "min-h-11 rounded-xl border px-3 py-2.5 text-left text-sm font-semibold transition-colors",
-                          selected
-                            ? "border-indigo-300 bg-indigo-50 text-indigo-800 ring-2 ring-indigo-500/20"
-                            : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                          "block text-sm font-semibold",
+                          selected ? "text-indigo-950" : "text-slate-900",
                         )}
                       >
-                        {kind === "COMPANY" ? "Company" : "Individual"}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="mt-1.5 text-xs text-slate-500">
-                  This chooses the onboarding form. Wallet, bills, and reports stay the same.
-                </p>
-              </div>
-            )}
-            {corporate && <Field
-              label="Opening wallet balance"
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              hint="Optional. Credited to the corporate wallet as soon as they are created."
-              value={form.openingBalance}
-              onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
-              placeholder="0.00"
-            />}
-          </section>
-
-          <section className="flex flex-col gap-4">
-            <div>
-              <h3 className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
-                First admin
-              </h3>
-              <p className="mt-1 text-xs text-slate-500">
-                They can sign in with this phone and password.
-              </p>
+                        {cardTitle}
+                      </span>
+                      <span
+                        className={cn(
+                          "mt-0.5 block text-xs leading-snug",
+                          selected ? "text-indigo-700" : "text-slate-500",
+                        )}
+                      >
+                        {subtitle}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-            <Field
-              label="Phone number"
-              required
-              inputMode="numeric"
-              value={form.phoneNumber}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  phoneNumber: e.target.value.replace(/\D/g, ""),
-                })
-              }
-              placeholder="9111111111"
-            />
-            <Field
-              label="Email"
-              type="email"
-              hint="Optional. Can be used with the password."
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="admin@fastpay.com"
-            />
-            <PasswordField
-              label="Password"
-              required
-              minLength={6}
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              placeholder="At least 6 characters"
-            />
-          </section>
+          </div>
+
+          <Field
+            label={corporate ? "Corporate name" : "Vendor name"}
+            required
+            value={form.clientName}
+            onChange={(e) => setForm({ ...form, clientName: e.target.value })}
+            placeholder={corporate ? "Meridian Facilities" : "Harbor Utilities"}
+          />
+
+          <Field
+            label="Contact person name"
+            required
+            value={form.contactPersonName}
+            onChange={(e) => setForm({ ...form, contactPersonName: e.target.value })}
+            placeholder="Rahul Sharma"
+            hint="Person you are in contact with for business verification and agreement signing."
+          />
+
+          <Field
+            label="Contact person email"
+            type="email"
+            required
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            placeholder={corporate ? "rahul@meridian.com" : "rahul@harborutilities.com"}
+          />
+
+          <Field
+            label="Contact person phone"
+            required
+            inputMode="numeric"
+            maxLength={10}
+            value={form.phoneNumber}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                phoneNumber: e.target.value.replace(/\D/g, "").slice(0, 10),
+              })
+            }
+            placeholder="9111111111"
+          />
         </form>
       </Modal>
 
@@ -536,7 +533,7 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
             >
               {copied ? "Copied" : "Copy details"}
             </Button>
-            <Button onClick={goToServicesTab}>Set up services</Button>
+            <Button onClick={openCreatedClient}>Open client</Button>
           </>
         }
       >

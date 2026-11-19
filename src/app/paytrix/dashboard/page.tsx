@@ -56,7 +56,8 @@ const LINKS = [
 export default function OrganisationDashboard() {
   const router = useRouter();
   const toast = useToast();
-  const isOrgAdmin = getUser()?.role === "ORGANISATION_ADMIN";
+  const role = getUser()?.role;
+  const isOrgAdmin = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN";
   const [me, setMe] = useState<OrganisationMe | null>(null);
   const [analytics, setAnalytics] = useState<OrganisationAnalytics | null>(null);
   const [loading, setLoading] = useState(true);

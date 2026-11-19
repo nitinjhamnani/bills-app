@@ -7,7 +7,8 @@ import { cn } from "@/lib/cn";
 
 export function ClientSupportFab({ unread }: { unread: number }) {
   const pathname = usePathname();
-  if (pathname === "/client/support" || pathname.startsWith("/client/support/")) {
+  const supportHref = pathname.startsWith("/vendor") ? "/vendor/support" : "/client/support";
+  if (pathname === supportHref || pathname.startsWith(`${supportHref}/`)) {
     return null;
   }
 
@@ -15,7 +16,7 @@ export function ClientSupportFab({ unread }: { unread: number }) {
 
   return (
     <Link
-      href="/client/support"
+      href={supportHref}
       aria-label={label}
       title={label}
       className={cn(

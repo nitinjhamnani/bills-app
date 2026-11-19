@@ -1,8 +1,13 @@
 "use client";
 
-import { forwardRef, useState } from "react";
+import { Children, forwardRef, isValidElement, useMemo, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/cn";
+import {
+  SearchableSelect,
+  type SearchableOption,
+  type SearchableSelectProps,
+} from "./SearchableSelect";
 
 const controlClasses =
   "min-h-11 w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-accent focus:ring-2 focus:ring-accent/20";
@@ -60,21 +65,89 @@ export function PasswordField({
   );
 }
 
+function extractNodeText(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(extractNodeText).join("");
+  if (isValidElement<{ children?: React.ReactNode }>(node)) {
+    return extractNodeText(node.props.children);
+  }
+  return "";
+}
+
+function collectOptions(
+  node: React.ReactNode,
+  out: Array<{ value: string; label: string }>,
+) {
+  Children.forEach(node, (child) => {
+    if (!isValidElement<{ value?: string | number; children?: React.ReactNode }>(child)) {
+      return;
+    }
+    if (child.type === "option") {
+      const rawValue = child.props.value;
+      const label = extractNodeText(child.props.children).trim();
+      const value = rawValue !== undefined ? String(rawValue) : label;
+      out.push({ value, label });
+    } else if (child.props?.children) {
+      collectOptions(child.props.children, out);
+    }
+  });
+}
+
 export function SelectField({
   label,
   hint,
   className,
   children,
-  ...props
+  value,
+  defaultValue,
+  onChange,
+  disabled,
+  required,
 }: WrapperProps & React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const { placeholder, selectableOptions } = useMemo(() => {
+    const raw: Array<{ value: string; label: string }> = [];
+    collectOptions(children, raw);
+    const emptyOption = raw.find((opt) => opt.value === "");
+    const nonEmpty: SearchableOption[] = raw
+      .filter((opt) => opt.value !== "")
+      .map((opt) => ({ value: opt.value, label: opt.label }));
+    return {
+      placeholder: emptyOption?.label || "Select an option...",
+      selectableOptions: nonEmpty,
+    };
+  }, [children]);
+
+  const currentValue =
+    value !== undefined
+      ? String(value)
+      : defaultValue !== undefined
+        ? String(defaultValue)
+        : "";
+
   return (
-    <label className={cn("flex flex-col gap-1.5 text-sm", className)}>
-      <span className="font-medium text-slate-700">{label}</span>
-      <select className={controlClasses} {...props}>
-        {children}
-      </select>
-      {hint && <span className="text-xs text-slate-400">{hint}</span>}
-    </label>
+    <SearchableSelect
+      label={label}
+      value={currentValue}
+      onChange={(nextValue) => {
+        if (!onChange) return;
+        const syntheticEvent = {
+          target: { value: nextValue },
+          currentTarget: { value: nextValue },
+          preventDefault: () => undefined,
+          stopPropagation: () => undefined,
+        } as unknown as React.ChangeEvent<HTMLSelectElement>;
+        onChange(syntheticEvent);
+      }}
+      options={selectableOptions}
+      placeholder={placeholder}
+      emptyMessage={selectableOptions.length === 0 ? placeholder : "No matching options found."}
+      searchable={selectableOptions.length > 8}
+      hint={hint}
+      disabled={disabled}
+      required={required}
+      className={className}
+    />
   );
 }
 
@@ -138,3 +211,8 @@ export function Switch({
   );
 }
 
+export {
+  SearchableSelect,
+  type SearchableOption,
+  type SearchableSelectProps,
+};

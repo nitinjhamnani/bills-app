@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, FileText, Receipt, SlidersHorizontal } from "lucide-react";
+import { Download, FileText, PlusCircle, Receipt, SlidersHorizontal, Wallet } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { getUser } from "@/lib/auth";
+import { ProofModal } from "@/components/ProofModal";
 import { StatusBadge } from "@/components/StatusBadge";
-import { TableSkeleton } from "@/components/ui/Skeleton";
-import { CardHeader, ListCard } from "@/components/ui/Card";
+import { Skeleton, TableSkeleton } from "@/components/ui/Skeleton";
+import { Card, CardHeader, ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, SelectField } from "@/components/ui/Field";
@@ -13,17 +15,28 @@ import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
-import type { LedgerEntryDto } from "@/lib/types";
+import { buildXlsxBlob } from "@/lib/xlsx";
+import { isOrgAdmin, type ClientWallet, type LedgerEntryDto, type WalletTopup } from "@/lib/types";
 
 type EntryTypeFilter = "ALL" | "DEBIT" | "CREDIT";
 type SortKey = "date_desc" | "date_asc" | "amount_desc" | "amount_asc";
 
-const CATEGORIES = ["RECHARGE", "ELECTRICITY"] as const;
-
 const CATEGORY_LABELS: Record<string, string> = {
   RECHARGE: "Recharge",
+  ADJUSTMENT: "Manual credit",
+  FEE: "Convenience fee",
   ELECTRICITY: "Electricity",
 };
+
+function categoryLabel(category: string) {
+  if (CATEGORY_LABELS[category]) return CATEGORY_LABELS[category];
+  return category
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 const SORT_LABELS: Record<SortKey, string> = {
   date_desc: "Date (newest first)",
@@ -34,11 +47,29 @@ const SORT_LABELS: Record<SortKey, string> = {
 
 const EXPORT_COLUMNS = ["When", "Type", "Category", "Amount", "Balance after", "Description"];
 
+function inr(amount: number) {
+  return `₹${amount.toLocaleString("en-IN")}`;
+}
+
 export function TransactionsTab({ clientId }: { clientId: string }) {
   const toast = useToast();
+  const role = getUser()?.role;
+  const canCreditWallet = isOrgAdmin(role);
+
+  const [balance, setBalance] = useState<number | null>(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
   const [entries, setEntries] = useState<LedgerEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [topups, setTopups] = useState<WalletTopup[]>([]);
+  const [topupsLoading, setTopupsLoading] = useState(true);
+  const [busyTopupId, setBusyTopupId] = useState<string | null>(null);
+  const [proofId, setProofId] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  const [addFundsOpen, setAddFundsOpen] = useState(false);
+  const [addAmount, setAddAmount] = useState("");
+  const [addNote, setAddNote] = useState("");
+  const [addingFunds, setAddingFunds] = useState(false);
 
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [entryType, setEntryType] = useState<EntryTypeFilter>("ALL");
@@ -50,33 +81,86 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("date_desc");
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadAll() {
-      setLoading(true);
-      try {
-        const data = await apiFetch<LedgerEntryDto[]>(
-          `/api/v1/clients/${clientId}/wallet/ledger`,
-        );
-        if (!cancelled) setEntries(data);
-      } catch (err) {
-        if (!cancelled) {
-          toast.error(
-            err instanceof ApiError
-              ? err.message
-              : "Failed to load transactions",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  async function loadWalletAndLedger() {
+    setLoading(true);
+    setBalanceLoading(true);
+    try {
+      const [walletData, ledgerData] = await Promise.all([
+        apiFetch<{ walletBalance?: number; balance?: number }>(`/api/v1/clients/${clientId}/wallet`),
+        apiFetch<LedgerEntryDto[]>(`/api/v1/clients/${clientId}/wallet/ledger`),
+      ]);
+      setBalance(walletData.walletBalance ?? walletData.balance ?? 0);
+      setEntries(ledgerData);
+    } catch (err) {
+      toast.error(
+        err instanceof ApiError ? err.message : "Failed to load wallet transactions",
+      );
+    } finally {
+      setLoading(false);
+      setBalanceLoading(false);
     }
-    loadAll();
-    return () => {
-      cancelled = true;
-    };
+  }
+
+  async function loadTopups() {
+    setTopupsLoading(true);
+    try {
+      setTopups(await apiFetch<WalletTopup[]>(`/api/v1/clients/${clientId}/wallet/topups`));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load top-up requests");
+    } finally {
+      setTopupsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadWalletAndLedger();
+    void loadTopups();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId]);
+
+  async function handleAddFunds(e: React.FormEvent) {
+    e.preventDefault();
+    setAddingFunds(true);
+    try {
+      const updated = await apiFetch<ClientWallet>(
+        `/api/v1/paytrix/wallets/${clientId}/credit`,
+        {
+          method: "POST",
+          body: {
+            amount: Number(addAmount),
+            note: addNote.trim() || "Manual wallet credit",
+          },
+        },
+      );
+      toast.success(`${inr(Number(addAmount))} credited to wallet`);
+      setAddFundsOpen(false);
+      setAddAmount("");
+      setAddNote("");
+      setBalance(updated.balance);
+      await loadWalletAndLedger();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to credit wallet");
+    } finally {
+      setAddingFunds(false);
+    }
+  }
+
+  async function reviewTopup(id: string, approve: boolean) {
+    setBusyTopupId(id);
+    try {
+      await apiFetch(`/api/v1/paytrix/wallet-topups/${id}/review`, {
+        method: "POST",
+        body: { approve },
+      });
+      toast.success(approve ? "Top-up accepted and wallet credited" : "Top-up rejected");
+      await Promise.all([loadTopups(), loadWalletAndLedger()]);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setBusyTopupId(null);
+    }
+  }
 
   const visible = useMemo(() => {
     let result = entries;
@@ -146,41 +230,49 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
     setSearch("");
   }
 
+  const categories = useMemo(() => {
+    const set = new Set<string>(["RECHARGE", "ADJUSTMENT", "FEE", "ELECTRICITY"]);
+    for (const entry of entries) {
+      if (entry.category) set.add(entry.category);
+    }
+    return Array.from(set).sort();
+  }, [entries]);
+
   function exportRows() {
     return visible.map((e) => [
       new Date(e.createdAt).toLocaleString(),
       e.entryType,
-      CATEGORY_LABELS[e.category] ?? e.category,
+      categoryLabel(e.category),
       e.amount,
       e.balanceAfter,
       e.description ?? "",
     ]);
   }
 
-  function exportCsv() {
+  function exportXlsx() {
     if (visible.length === 0) {
       toast.error("Nothing to export with the current filters");
       return;
     }
-    const escapeCell = (value: unknown) => {
-      const str = String(value ?? "");
-      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-    };
-    const csv = [EXPORT_COLUMNS, ...exportRows()]
-      .map((row) => row.map(escapeCell).join(","))
-      .join("\r\n");
-    const blob = new Blob(["﻿" + csv], {
-      type: "text/csv;charset=utf-8;",
+    const blob = buildXlsxBlob({
+      sheetName: "Transactions",
+      title: `Client Wallet Transactions (${clientId})`,
+      meta: [
+        { label: "Client", value: clientId },
+        { label: "Rows", value: String(visible.length) },
+      ],
+      headers: EXPORT_COLUMNS,
+      rows: exportRows(),
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `transactions-${clientId}.csv`;
+    a.download = `transactions-${clientId}.xlsx`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast.success(`Exported ${visible.length} transactions as CSV`);
+    toast.success(`Exported ${visible.length} transactions as Excel`);
   }
 
   async function exportPdf() {
@@ -220,11 +312,121 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
     }
   }
 
+  const creditAmount = Number(addAmount);
+  const nextBalance =
+    balance != null && Number.isFinite(creditAmount) && creditAmount > 0
+      ? balance + creditAmount
+      : null;
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto">
+      <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center sm:p-5">
+        <div className="flex items-center gap-3.5">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <Wallet size={20} />
+          </span>
+          <div>
+            <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
+              Wallet balance
+            </p>
+            {balanceLoading || balance == null ? (
+              <Skeleton className="mt-1 h-8 w-36" />
+            ) : (
+              <p className="mt-0.5 font-mono text-2xl font-bold tracking-tight text-slate-900">
+                {inr(balance)}
+              </p>
+            )}
+          </div>
+        </div>
+        {canCreditWallet && (
+          <Button
+            icon={<PlusCircle size={16} />}
+            onClick={() => {
+              setAddAmount("");
+              setAddNote("");
+              setAddFundsOpen(true);
+            }}
+          >
+            Add money
+          </Button>
+        )}
+      </div>
+
+      {!topupsLoading && topups.length > 0 && (
+        <Card>
+          <CardHeader
+            title="Wallet top-up requests"
+            description="Review offline top-up requests submitted by this corporate."
+          />
+          <Table>
+            <THead columns={["Amount", "Payment mode", "Reference", "Status", "Requested", ""]} />
+            <TBody>
+              {topups.map((t) => (
+                <TR key={t.id}>
+                  <TD className="font-mono text-sm font-semibold text-slate-900">
+                    {inr(t.amount)}
+                  </TD>
+                  <TD>{t.paymentMode}</TD>
+                  <TD>
+                    <div className="flex items-center gap-2">
+                      <span>{t.paymentReference ?? "—"}</span>
+                      {t.hasProof && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setProofId(`/api/v1/clients/${clientId}/wallet/topups/${t.id}/proof`)}
+                        >
+                          View proof
+                        </Button>
+                      )}
+                    </div>
+                  </TD>
+                  <TD>
+                    <StatusBadge status={t.status} />
+                  </TD>
+                  <TD className="text-slate-500">
+                    {new Date(t.createdAt).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </TD>
+                  <TD>
+                    {t.status === "PENDING" &&
+                      (t.canReview ? (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={busyTopupId === t.id}
+                            onClick={() => reviewTopup(t.id, true)}
+                          >
+                            Accept
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyTopupId === t.id}
+                            onClick={() => reviewTopup(t.id, false)}
+                          >
+                            Reject
+                          </Button>
+                        </div>
+                      ) : role === "MAKER" ? (
+                        <span className="text-xs font-medium text-amber-700">Waiting for a checker</span>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      ))}
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </Card>
+      )}
+
       <ListCard fitContent={false}>
         <CardHeader
-          title="All transactions"
+          title="Wallet transactions"
           description={
             loading
               ? "Loading..."
@@ -249,7 +451,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
                 variant="outline"
                 size="sm"
                 icon={<Download size={14} />}
-                onClick={exportCsv}
+                onClick={exportXlsx}
               >
                 Export Excel
               </Button>
@@ -271,7 +473,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
           <EmptyState
             icon={Receipt}
             title="No matching transactions"
-            description="Try widening or resetting the filters above."
+            description="Wallet credits and bill payment debits will appear here."
           />
         ) : (
           <Table>
@@ -315,6 +517,52 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
       </ListCard>
 
       <Modal
+        open={addFundsOpen}
+        onClose={() => setAddFundsOpen(false)}
+        title="Add money to wallet"
+        description="Credits the corporate wallet immediately and records a manual credit entry."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setAddFundsOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              form="wallet-add-funds-form"
+              type="submit"
+              loading={addingFunds}
+              disabled={!Number.isFinite(creditAmount) || creditAmount <= 0}
+            >
+              Add money
+            </Button>
+          </>
+        }
+      >
+        <form id="wallet-add-funds-form" onSubmit={handleAddFunds} className="flex flex-col gap-4">
+          <Field
+            label="Amount (₹)"
+            type="number"
+            required
+            min={1}
+            step="0.01"
+            value={addAmount}
+            onChange={(e) => setAddAmount(e.target.value)}
+            placeholder="5000"
+          />
+          <Field
+            label="Note"
+            value={addNote}
+            onChange={(e) => setAddNote(e.target.value)}
+            placeholder="Reason or payment reference"
+          />
+          {nextBalance != null && (
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              New wallet balance will be <strong className="font-mono text-slate-900">{inr(nextBalance)}</strong>.
+            </p>
+          )}
+        </form>
+      </Modal>
+
+      <Modal
         open={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}
         title="Filter transactions"
@@ -344,9 +592,9 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
             onChange={(e) => setCategory(e.target.value)}
           >
             <option value="ALL">All</option>
-            {CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <option key={c} value={c}>
-                {CATEGORY_LABELS[c]}
+                {categoryLabel(c)}
               </option>
             ))}
           </SelectField>
@@ -397,6 +645,8 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
           </SelectField>
         </div>
       </Modal>
+
+      <ProofModal src={proofId} onClose={() => setProofId(null)} />
     </div>
   );
 }

@@ -23,24 +23,24 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
 import { apiFetch } from "@/lib/api-client";
 import { useSupportUnreadCount } from "@/lib/support-unread";
-import type { OrganisationMe, UserProfile } from "@/lib/types";
+import { isOrgAdmin, type OrganisationMe, type UserProfile } from "@/lib/types";
 
 const NAV: NavLink[] = [
   { href: "/paytrix/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/paytrix/corporates", label: "Corporates", icon: Building2 },
-  { href: "/paytrix/vendors", label: "Vendors", icon: Store },
-  { href: "/paytrix/commissions", label: "Commissions", icon: BadgePercent },
-  { href: "/paytrix/users", label: "Users", icon: Users },
-  { href: "/paytrix/managed-bills", label: "Managed Bills", icon: FileText },
-  { href: "/paytrix/my-payments", label: "My Payments", icon: Send },
-  { href: "/paytrix/vendor-payments", label: "Vendor Payments", icon: Banknote },
-  { href: "/paytrix/vendor-commissions", label: "Vendor Commissions", icon: Percent },
-  { href: "/paytrix/manage-wallets", label: "Manage Wallets", icon: Wallet },
-  { href: "/paytrix/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/paytrix/disputes", label: "Disputes", icon: AlertTriangle },
-  { href: "/paytrix/support-tickets", label: "Support Tickets", icon: LifeBuoy },
-  { href: "/paytrix/reports", label: "Reports", icon: BarChart3 },
-  { href: "/paytrix/settings", label: "Settings", icon: Settings },
+  { href: "/paytrix/my-payments", label: "Bill Payments", icon: Send },
+  { href: "/paytrix/corporates", label: "Corporates", icon: Building2, group: "Management" },
+  { href: "/paytrix/vendors", label: "Vendors", icon: Store, group: "Management" },
+  { href: "/paytrix/manage-wallets", label: "Wallets", icon: Wallet, group: "Management" },
+  { href: "/paytrix/users", label: "Users", icon: Users, group: "Management" },
+  { href: "/paytrix/bill-dues", label: "Bill Dues", icon: FileText, group: "Corporate" },
+  { href: "/paytrix/disputes", label: "Bill Disputes", icon: AlertTriangle, group: "Corporate" },
+  { href: "/paytrix/commissions", label: "Commissions", icon: BadgePercent, group: "Vendors" },
+  { href: "/paytrix/vendor-payments", label: "Vendor Payments", icon: Banknote, group: "Vendors" },
+  { href: "/paytrix/vendor-commissions", label: "Vendor Commissions", icon: Percent, group: "Vendors" },
+  { href: "/paytrix/transactions", label: "Transactions", icon: ArrowLeftRight, group: "Platform & Settings" },
+  { href: "/paytrix/support-tickets", label: "Support Tickets", icon: LifeBuoy, group: "Platform & Settings" },
+  { href: "/paytrix/reports", label: "Reports", icon: BarChart3, group: "Platform & Settings" },
+  { href: "/paytrix/settings", label: "Settings", icon: Settings, group: "Platform & Settings" },
 ];
 
 function OrganisationShell({
@@ -53,7 +53,16 @@ function OrganisationShell({
   const router = useRouter();
   const pathname = usePathname();
   const sales = user.role === "SALES";
-  const onSalesPage = pathname === "/paytrix/sales" || pathname.startsWith("/paytrix/sales/");
+  const isAdmin = isOrgAdmin(user.role);
+  const onSalesPage =
+    pathname === "/paytrix/sales" ||
+    pathname.startsWith("/paytrix/sales/") ||
+    pathname === "/paytrix/profile";
+  const adminOnlyBlocked =
+    !isAdmin &&
+    ["/paytrix/users", "/paytrix/transactions"].some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+    );
   const unread = useSupportUnreadCount(
     sales ? null : "/api/v1/paytrix/support-tickets/unread-summary",
   );
@@ -63,13 +72,17 @@ function OrganisationShell({
         { href: "/paytrix/sales", label: "Dashboard", icon: LayoutDashboard, exact: true },
         { href: "/paytrix/sales/reports", label: "Reports", icon: BarChart3 },
       ]
-    : NAV.filter((item) => item.href !== "/paytrix/transactions" || user.role === "ORGANISATION_ADMIN").map(
+    : NAV.filter(
+        (item) =>
+          (item.href !== "/paytrix/transactions" && item.href !== "/paytrix/users") || isAdmin,
+      ).map(
         (item) => (item.href === "/paytrix/support-tickets" ? { ...item, badge: unread } : item),
       );
 
   useEffect(() => {
     if (sales && !onSalesPage) router.replace("/paytrix/sales");
-  }, [sales, onSalesPage, router]);
+    else if (!sales && adminOnlyBlocked) router.replace("/paytrix/dashboard");
+  }, [sales, onSalesPage, adminOnlyBlocked, router]);
 
   useEffect(() => {
     apiFetch<OrganisationMe>("/api/v1/paytrix/me")
@@ -77,7 +90,7 @@ function OrganisationShell({
       .catch(() => setOrganisationName(null));
   }, []);
 
-  if (sales && !onSalesPage) return null;
+  if ((sales && !onSalesPage) || (!sales && adminOnlyBlocked)) return null;
 
   return (
     <AppShell user={user} moduleLabel={organisationName ?? ""} nav={nav}>
@@ -92,7 +105,7 @@ export default function OrganisationLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthGuard allowedRoles={["ORGANISATION_ADMIN", "MAKER", "CHECKER", "VIEWER", "SALES"]}>
+    <AuthGuard allowedRoles={["SUPER_ADMIN", "ORGANISATION_ADMIN", "MAKER", "CHECKER", "VIEWER", "SALES"]}>
       {(user) => <OrganisationShell user={user}>{children}</OrganisationShell>}
     </AuthGuard>
   );

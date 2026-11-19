@@ -2,17 +2,15 @@
 
 import { useCallback, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Hash, Receipt, ShieldCheck } from "lucide-react";
+import { Hash, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { cn } from "@/lib/cn";
-import { ApprovalRulesTab } from "./ApprovalRulesTab";
 import { EnablementTab } from "./EnablementTab";
 import { RangesTab } from "./RangesTab";
 
 const TABS = [
   { key: "categories", label: "Categories", icon: Receipt },
   { key: "ranges", label: "Amount ranges", icon: Hash },
-  { key: "approval-rules", label: "Approval rules", icon: ShieldCheck },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -27,7 +25,7 @@ export default function OrganisationSettingsPage() {
     : "categories";
 
   const [tab, setTab] = useState<TabKey>(initialTab);
-  const [counts, setCounts] = useState({ categories: 0, ranges: 0, rules: 0 });
+  const [counts, setCounts] = useState({ categories: 0, ranges: 0 });
 
   const setCategoryCount = useCallback((categories: number) => {
     setCounts((current) => (current.categories === categories ? current : { ...current, categories }));
@@ -35,17 +33,12 @@ export default function OrganisationSettingsPage() {
   const setRangeCount = useCallback((ranges: number) => {
     setCounts((current) => (current.ranges === ranges ? current : { ...current, ranges }));
   }, []);
-  const setRuleCount = useCallback((rules: number) => {
-    setCounts((current) => (current.rules === rules ? current : { ...current, rules }));
-  }, []);
-
-  const countFor = (key: TabKey) => counts[key === "approval-rules" ? "rules" : key];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Paytrix settings"
-        description="Which categories Paytrix can use, the amount ranges commission rules choose from, and when a top-up needs a checker."
+        description="Which categories and operators Paytrix can use, and commission amount ranges."
       />
 
       <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
@@ -70,7 +63,7 @@ export default function OrganisationSettingsPage() {
                   active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
                 )}
               >
-                {countFor(item.key)}
+                {counts[item.key]}
               </span>
             </button>
           );
@@ -82,9 +75,6 @@ export default function OrganisationSettingsPage() {
       </div>
       <div className={tab === "ranges" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
         <RangesTab onCount={setRangeCount} />
-      </div>
-      <div className={tab === "approval-rules" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
-        <ApprovalRulesTab onCount={setRuleCount} />
       </div>
     </div>
   );

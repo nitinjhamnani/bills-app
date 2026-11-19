@@ -21,6 +21,8 @@ export interface NavLink {
   badge?: number;
   /** Match this link only on its own path, not on pages nested under it. */
   exact?: boolean;
+  /** Optional sidebar section heading used to group related navigation items. */
+  group?: string;
 }
 
 const SIDEBAR_COLLAPSED_KEY = "b2bfintech.sidebarCollapsed";
@@ -120,18 +122,34 @@ export function AppShell({
           {/* Navigation Links */}
           <nav className="flex-1 overflow-y-auto px-3 py-4">
             <ul className="flex flex-col gap-1">
-              {nav.map((link) => {
+              {nav.map((link, index) => {
                 const Icon = link.icon;
                 const active = isNavActive(pathname, link.href, link.exact);
                 const badge = link.badge ?? 0;
+                const prevGroup = index > 0 ? nav[index - 1]?.group : undefined;
+                const showGroupHeader = Boolean(link.group && link.group !== prevGroup);
+                const showGroupDivider = index > 0 && link.group !== prevGroup;
                 return (
                   <li key={link.href}>
+                    {showGroupHeader && !collapsed && (
+                      <div
+                        className={cn(
+                          "px-3 pb-1.5 text-[10px] font-bold tracking-[0.12em] text-slate-400 uppercase",
+                          index > 0 ? "mt-3 border-t border-slate-100 pt-3" : "pt-0.5",
+                        )}
+                      >
+                        {link.group}
+                      </div>
+                    )}
+                    {showGroupDivider && collapsed && (
+                      <div className="my-2 h-px bg-slate-100" aria-hidden />
+                    )}
                     <Link
                       href={link.href}
                       onClick={() => setMobileOpen(false)}
                       title={collapsed ? link.label : undefined}
                       className={cn(
-                        "relative flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all duration-150",
+                        "relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150",
                         active
                           ? "bg-blue-50/80 text-blue-600 font-bold shadow-2xs"
                           : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900",

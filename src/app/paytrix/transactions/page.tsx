@@ -62,7 +62,8 @@ function partyKind(type: OrganisationTransaction["counterpartyType"]) {
 
 export default function OrganisationTransactionsPage() {
   const toast = useToast();
-  const isAdmin = getUser()?.role === "ORGANISATION_ADMIN";
+  const currentRole = getUser()?.role;
+  const isAdmin = currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
   const [rows, setRows] = useState<OrganisationTransaction[]>([]);
   const [loading, setLoading] = useState(isAdmin);
   const [filterOpen, setFilterOpen] = useState(false);

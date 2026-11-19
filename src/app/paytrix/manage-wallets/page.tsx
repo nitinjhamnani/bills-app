@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { History, Inbox, PlusCircle, Search, Wallet as WalletIcon } from "lucide-react";
 import { AuditLogTab } from "@/app/paytrix/manage-wallets/AuditLogTab";
 import { apiFetch, ApiError } from "@/lib/api-client";
+import { getUser } from "@/lib/auth";
 import { ProofModal } from "@/components/ProofModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card, ListCard } from "@/components/ui/Card";
@@ -36,6 +37,8 @@ const LEDGER_FILTERS: { key: LedgerFilter; label: string }[] = [
 
 const CATEGORY_LABELS: Record<string, string> = {
   RECHARGE: "Recharge",
+  ADJUSTMENT: "Manual credit",
+  FEE: "Convenience fee",
   ELECTRICITY: "Electricity",
 };
 
@@ -64,6 +67,8 @@ function formatWhen(iso: string) {
 export default function ManageWalletsPage() {
   const toast = useToast();
   const router = useRouter();
+  const role = getUser()?.role;
+  const isAdmin = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN";
   const searchParams = useSearchParams();
   const requested = searchParams.get("tab");
   const tab: TabKey = requested === "wallets" || requested === "audit" ? requested : "topups";
@@ -372,8 +377,10 @@ export default function ManageWalletsPage() {
                             Reject
                           </Button>
                         </div>
-                      ) : (
+                      ) : role === "MAKER" ? (
                         <p className="text-right text-xs font-medium text-amber-700">Waiting for a checker</p>
+                      ) : (
+                        <p className="text-right text-xs text-slate-400">—</p>
                       )}
                     </TD>
                   </TR>
@@ -487,9 +494,11 @@ export default function ManageWalletsPage() {
                       </p>
                     </div>
                   </div>
-                  <Button icon={<PlusCircle size={16} />} onClick={openAddFunds}>
-                    Add money
-                  </Button>
+                  {isAdmin && (
+                    <Button icon={<PlusCircle size={16} />} onClick={openAddFunds}>
+                      Add money
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">

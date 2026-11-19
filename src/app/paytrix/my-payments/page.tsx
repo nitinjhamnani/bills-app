@@ -614,7 +614,7 @@ export default function OrganisationMyPaymentsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
-        title="My Payments"
+        title="Bill Payments"
         description="Every bill a client has paid, including bills assigned to a vendor. Assign a Paytrix bill when a commission rule covers it, or verify a vendor payment here."
         actions={
           <>
@@ -728,7 +728,7 @@ export default function OrganisationMyPaymentsPage() {
               )}
             </p>
             <div className="flex flex-wrap gap-2">
-              {getUser()?.role === "ORGANISATION_ADMIN" && (
+              {(getUser()?.role === "SUPER_ADMIN" || getUser()?.role === "ORGANISATION_ADMIN") && (
               <Button
                 size="sm"
                 icon={<UserPlus size={14} />}
@@ -738,7 +738,7 @@ export default function OrganisationMyPaymentsPage() {
                 Assign
               </Button>
               )}
-              {(getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "MAKER") && (
+              {(getUser()?.role === "SUPER_ADMIN" || getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "MAKER") && (
               <Button
                 size="sm"
                 icon={<PackageCheck size={14} />}
@@ -749,7 +749,7 @@ export default function OrganisationMyPaymentsPage() {
                 Pick up {selectedPending > 0 ? selectedPending : ""}
               </Button>
               )}
-              {(getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "CHECKER") && selectedToVerify.length > 0 && (
+              {(getUser()?.role === "SUPER_ADMIN" || getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "CHECKER") && selectedToVerify.length > 0 && (
                 <Button size="sm" icon={<ShieldCheck size={14} />} onClick={() => openVerify(selectedToVerify)}>
                   Verify {selectedToVerify.length}
                 </Button>
@@ -1341,9 +1341,9 @@ function RowAction({
   fullWidth?: boolean;
 }) {
   const role = getUser()?.role;
-  const canPickUp = role === "ORGANISATION_ADMIN" || role === "MAKER";
+  const canPickUp = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN" || role === "MAKER";
 
-  const canVerify = role === "ORGANISATION_ADMIN" || role === "CHECKER";
+  const canVerify = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN" || role === "CHECKER";
   if (payment.vendorStage === "VENDOR_PAID" && canVerify) {
     return (
       <Button size="sm" className={fullWidth ? "w-full" : undefined} icon={<ShieldCheck size={14} />} onClick={onVerify}>

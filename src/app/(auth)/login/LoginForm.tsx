@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { saveSession } from "@/lib/auth";
-import { homeForRole, type LoginResponse } from "@/lib/types";
+import { homeForUser, type LoginResponse } from "@/lib/types";
 
 const QUICK_LOGINS = [
   { label: "Paytrix admin", identifier: "9999999999", password: "Password@123" },
@@ -39,7 +39,7 @@ export function LoginForm() {
         auth: false,
       });
       saveSession(login);
-      router.replace(homeForRole(login.user.role));
+      router.replace(homeForUser(login.user));
     } catch (err) {
       setError(
         err instanceof ApiError

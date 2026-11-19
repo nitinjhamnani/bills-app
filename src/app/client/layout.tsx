@@ -12,14 +12,13 @@ import {
   Send,
   Users,
   BarChart3,
-  ArrowLeftRight,
 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
 import { ClientSupportFab } from "@/components/support/ClientSupportFab";
 import { useSupportUnreadCount } from "@/lib/support-unread";
 import { apiFetch } from "@/lib/api-client";
-import type { ClientAccount, Role, UserProfile } from "@/lib/types";
+import { isVendorUser, type ClientAccount, type Role, type UserProfile } from "@/lib/types";
 
 const CORPORATE_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -30,14 +29,6 @@ const CORPORATE_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/client/my-payments", label: "My Payments", icon: Send },
   { href: "/client/support", label: "Support", icon: MessageCircle },
   { href: "/client/reports", label: "Reports", icon: BarChart3, roles: ["CLIENT_ADMIN"] },
-  { href: "/client/users", label: "Users", icon: Users, roles: ["CLIENT_ADMIN"] },
-];
-
-const VENDOR_NAV: Array<NavLink & { roles?: Role[] }> = [
-  { href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/client/assigned-bills", label: "My Payments", icon: Send },
-  { href: "/client/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/client/support", label: "Support", icon: MessageCircle },
   { href: "/client/users", label: "Users", icon: Users, roles: ["CLIENT_ADMIN"] },
 ];
 
@@ -54,19 +45,28 @@ function ClientShell({
   const pathname = usePathname();
   const router = useRouter();
   const [account, setAccount] = useState<ClientAccount | null>(null);
+  const vendorRedirect = isVendorUser(user) || account?.clientType === "VENDOR";
   const branchBlocked =
     user.role === "BRANCH_USER" &&
-    ["/client/wallet", "/client/reports", "/client/users", "/client/branches", "/client/rules", "/client/assigned-bills"].some(
+    ["/client/wallet", "/client/reports", "/client/users", "/client/branches", "/client/rules"].some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
     );
-  const rulesRoute = pathname === "/client/rules" || pathname.startsWith("/client/rules/");
-  const vendorRulesBlocked = rulesRoute && account?.clientType === "VENDOR";
-  const rulesHidden = rulesRoute && (account == null || account.clientType === "VENDOR");
+
   useEffect(() => {
+    if (isVendorUser(user)) {
+      router.replace("/vendor/dashboard");
+      return;
+    }
     apiFetch<ClientAccount>("/api/v1/client/account")
-      .then(setAccount)
+      .then((next) => {
+        setAccount(next);
+        if (next.clientType === "VENDOR") {
+          router.replace("/vendor/dashboard");
+        }
+      })
       .catch(() => setAccount(null));
-  }, []);
+  }, [router, user]);
+
   const pending = account?.status === "PENDING";
   useEffect(() => {
     const allowedWhilePending = pathname === "/client/dashboard" || pathname === "/client/onboarding/esign";
@@ -74,24 +74,30 @@ function ClientShell({
       router.replace("/client/dashboard");
     }
   }, [pending, pathname, router, user.role]);
+
   useEffect(() => {
-    if (branchBlocked || vendorRulesBlocked) router.replace("/client/dashboard");
-  }, [branchBlocked, vendorRulesBlocked, router]);
-  const links = account == null || pending
-    ? [{ href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard }]
-    : account.clientType === "VENDOR" ? VENDOR_NAV : CORPORATE_NAV;
-  const nav = links.filter((item) => !item.roles || item.roles.includes(user.role)).map((item) =>
-    item.href === "/client/support" ? { ...item, badge: unread } : item,
-  );
+    if (branchBlocked) router.replace("/client/dashboard");
+  }, [branchBlocked, router]);
+
+  if (vendorRedirect) return null;
+
+  const links =
+    account == null || pending
+      ? [{ href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard }]
+      : CORPORATE_NAV;
+  const nav = links
+    .filter((item) => !item.roles || item.roles.includes(user.role))
+    .map((item) => (item.href === "/client/support" ? { ...item, badge: unread } : item));
+
   return (
     <>
-      <AppShell user={user} moduleLabel={account?.clientType === "VENDOR" ? "Vendor" : "Client"} nav={nav}>
+      <AppShell user={user} moduleLabel="Client" nav={nav}>
         {account?.status === "SUSPENDED" && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             This account is suspended. Paytrix has to reactivate it before you can transact.
           </div>
         )}
-        {branchBlocked || rulesHidden ? null : children}
+        {branchBlocked ? null : children}
       </AppShell>
       {!pending && <ClientSupportFab unread={unread} />}
     </>

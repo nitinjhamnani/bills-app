@@ -17,5 +17,5 @@ export function onboardingStatus(client: {
   if (client.contractStatus !== "SIGNED") {
     return { code: "CONTRACT_PENDING", label: "Contract pending" };
   }
-  return { code: "PENDING", label: "Pending" };
+  return { code: "PENDING", label: "Pending activation" };
 }

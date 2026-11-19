@@ -119,7 +119,7 @@ export default function OrganisationMyPaymentDetailsPage() {
         {payment && (
           <div className="flex shrink-0 items-center gap-2">
             {payment.orgStatus === "PENDING" &&
-              (getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "MAKER") && (
+              (getUser()?.role === "SUPER_ADMIN" || getUser()?.role === "ORGANISATION_ADMIN" || getUser()?.role === "MAKER") && (
                 <Button loading={busy} onClick={pickUp}>
                   Pick up
                 </Button>

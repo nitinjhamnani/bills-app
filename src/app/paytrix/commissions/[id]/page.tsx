@@ -38,7 +38,8 @@ export default function CommissionDetailPage() {
   const commissionId = params.id;
   const router = useRouter();
   const toast = useToast();
-  const canEdit = getUser()?.role === "ORGANISATION_ADMIN";
+  const currentRole = getUser()?.role;
+  const canEdit = currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
 
   const [commission, setCommission] = useState<Commission | null>(null);
   const [history, setHistory] = useState<CommissionLogEntry[]>([]);

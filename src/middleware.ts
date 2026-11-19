@@ -12,6 +12,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (
     pathname.startsWith("/client") ||
+    pathname.startsWith("/vendor") ||
     pathname.startsWith("/paytrix")
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -23,6 +24,8 @@ export const config = {
   matcher: [
     "/client",
     "/client/:path*",
+    "/vendor",
+    "/vendor/:path*",
     "/paytrix",
     "/paytrix/:path*",
   ],

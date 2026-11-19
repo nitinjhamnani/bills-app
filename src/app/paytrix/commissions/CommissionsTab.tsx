@@ -9,7 +9,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { Button } from "@/components/ui/Button";
 import { ListCard } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SelectField, Switch } from "@/components/ui/Field";
+import { SearchableSelect, SelectField, Switch } from "@/components/ui/Field";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { Table, TBody, TD, THead, TR } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
@@ -22,7 +22,8 @@ const ALL = "ALL";
 export function CommissionsTab({ vendorId }: { vendorId?: string }) {
   const toast = useToast();
   const router = useRouter();
-  const canEdit = getUser()?.role === "ORGANISATION_ADMIN";
+  const currentRole = getUser()?.role;
+  const canEdit = currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
   const [rows, setRows] = useState<Commission[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -98,15 +99,25 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <SelectField label="Operator" value={operator} onChange={(e) => setOperator(e.target.value)}>
-            <option value={ALL}>All</option>
-            {operators.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-          </SelectField>
+          <SearchableSelect
+            label="Operator"
+            value={operator === ALL ? "" : operator}
+            onChange={(val) => setOperator(val || ALL)}
+            allowClear
+            placeholder="All operators"
+            searchPlaceholder="Search operators..."
+            options={operators.map(([id, name]) => ({ value: id, label: name }))}
+          />
           {!vendorId && (
-            <SelectField label="Vendor" value={vendor} onChange={(e) => setVendor(e.target.value)}>
-              <option value={ALL}>All</option>
-              {vendors.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-            </SelectField>
+            <SearchableSelect
+              label="Vendor"
+              value={vendor === ALL ? "" : vendor}
+              onChange={(val) => setVendor(val || ALL)}
+              allowClear
+              placeholder="All vendors"
+              searchPlaceholder="Search vendors..."
+              options={vendors.map(([id, name]) => ({ value: id, label: name }))}
+            />
           )}
           <SelectField label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value={ALL}>All</option>
@@ -115,7 +126,7 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
             <option value="INACTIVE">Inactive</option>
           </SelectField>
         </div>
-        {canEdit && !vendorId && (
+        {canEdit && (
           <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add commission</Button>
         )}
       </div>
@@ -128,7 +139,7 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
             icon={BadgePercent}
             title="No commissions yet"
             description="Add a commission for a vendor on an operator and amount range. It is approved as soon as you save it."
-            action={canEdit && !vendorId ? <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add commission</Button> : undefined}
+            action={canEdit ? <Button icon={<Plus size={16} />} onClick={() => setFormOpen(true)}>Add commission</Button> : undefined}
           />
         ) : visible.length === 0 ? (
           <EmptyState
@@ -190,6 +201,7 @@ export function CommissionsTab({ vendorId }: { vendorId?: string }) {
 
       {formOpen && (
         <CommissionForm
+          defaultVendorId={vendorId}
           onClose={(saved) => {
             setFormOpen(false);
             if (saved) load();

@@ -23,8 +23,7 @@ import { StatCardSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { OnboardingTracker, type CompanyDetails } from "@/components/OnboardingTracker";
-import type { BillPayment, ClientAccount, ClientAnalytics } from "@/lib/types";
-import { vendorStageBadge, vendorStageOf } from "@/lib/vendor-stage";
+import type { ClientAccount, ClientAnalytics } from "@/lib/types";
 
 function inr(amount: number) {
   return `₹${amount.toLocaleString("en-IN")}`;
@@ -53,6 +52,7 @@ function BranchHomeDashboard() {
       .then(setHome)
       .catch((err) => toast.error(err instanceof ApiError ? err.message : "Failed to load dashboard"))
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -88,9 +88,6 @@ export default function ClientDashboard() {
   const [role, setRole] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
-    // localStorage is not available while the server renders this page. Reading it here
-    // keeps a branch user off the company dashboard, which would otherwise load the
-    // company wallet and then get rejected.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRole(getUser()?.role ?? null);
   }, []);
@@ -98,97 +95,6 @@ export default function ClientDashboard() {
   if (role == null) return null;
   if (role === "BRANCH_USER") return <BranchHomeDashboard />;
   return <CorporateDashboard />;
-}
-
-function vendorStage(bill: BillPayment): string {
-  return vendorStageOf(bill);
-}
-
-function VendorDashboard({ userName, role }: { userName?: string; role?: string }) {
-  const router = useRouter();
-  const toast = useToast();
-  const [bills, setBills] = useState<BillPayment[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    apiFetch<BillPayment[]>("/api/v1/client/assigned-bills")
-      .then(setBills)
-      .catch((err) => toast.error(err instanceof ApiError ? err.message : "Failed to load assigned bills"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const stages = {
-    ASSIGNED: bills.filter((bill) => vendorStage(bill) === "ASSIGNED"),
-    IN_PROGRESS: bills.filter((bill) => vendorStage(bill) === "IN_PROGRESS"),
-    VENDOR_PAID: bills.filter((bill) => vendorStage(bill) === "VENDOR_PAID"),
-    VERIFIED: bills.filter((bill) => vendorStage(bill) === "VERIFIED" || vendorStage(bill) === "REIMBURSED"),
-  };
-  const amount = (rows: BillPayment[]) => rows.reduce((total, bill) => total + bill.amount, 0);
-
-  return (
-    <div className="flex flex-col gap-4">
-      <PageHeader
-        title={userName ? `Welcome back, ${userName}` : "Dashboard"}
-        description="Bills a corporate pays are assigned to you. Follow them on My Payments until Paytrix verifies them. Verified bills also appear under Transactions."
-        actions={role ? <StatusBadge status={role} /> : undefined}
-      />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)
-        ) : (
-          <>
-            <BillStatCard label="Assigned" count={stages.ASSIGNED.length} amount={amount(stages.ASSIGNED)} icon={FileText} />
-            <BillStatCard label="In progress" count={stages.IN_PROGRESS.length} amount={amount(stages.IN_PROGRESS)} icon={Clock} tone="warning" />
-            <BillStatCard label="Waiting for Paytrix" count={stages.VENDOR_PAID.length} amount={amount(stages.VENDOR_PAID)} icon={Send} />
-            <BillStatCard label="Verified" count={stages.VERIFIED.length} amount={amount(stages.VERIFIED)} icon={PackageCheck} tone="success" />
-          </>
-        )}
-      </div>
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-          <div>
-            <h2 className="text-sm font-semibold text-slate-900">Assigned bills</h2>
-            <p className="mt-0.5 text-xs text-slate-500">Every bill currently assigned to this account.</p>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => router.push("/client/assigned-bills")}>
-            My Payments
-          </Button>
-        </div>
-        {loading ? (
-          <div className="p-4"><Skeleton className="h-16 w-full" /></div>
-        ) : bills.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-slate-500">
-            Bills appear here after a corporate pays and a rule matches this account.
-          </p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {bills.map((bill) => {
-              const stage = vendorStageBadge(vendorStage(bill));
-              return (
-                <li key={bill.id}>
-                  <button
-                    type="button"
-                    onClick={() => router.push("/client/assigned-bills")}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-slate-900">{bill.billerName}</span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-500">
-                        {bill.corporateName ?? "Corporate"} · {bill.customerBillAccountNumber}
-                      </span>
-                    </span>
-                    <span className="font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</span>
-                    <StatusBadge status={stage.status} label={stage.label} />
-                    <ChevronRight size={16} className="shrink-0 text-slate-300" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-    </div>
-  );
 }
 
 function CorporateDashboard() {
@@ -199,7 +105,6 @@ function CorporateDashboard() {
   const [analytics, setAnalytics] = useState<ClientAnalytics | null>(null);
   const [account, setAccount] = useState<ClientAccount | null>(null);
   const [loading, setLoading] = useState(true);
-  const vendor = account?.clientType === "VENDOR";
 
   useEffect(() => {
     Promise.all([
@@ -209,11 +114,15 @@ function CorporateDashboard() {
       .then(([nextAnalytics, nextAccount]) => {
         setAnalytics(nextAnalytics);
         setAccount(nextAccount);
+        if (nextAccount.clientType === "VENDOR") {
+          router.replace("/vendor/dashboard");
+        }
       })
       .catch((err) =>
         toast.error(err instanceof ApiError ? err.message : "Failed to load dashboard"),
       )
       .finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const pending = analytics?.pendingBills ?? 0;
@@ -250,6 +159,8 @@ function CorporateDashboard() {
     }
   }
 
+  if (account?.clientType === "VENDOR") return null;
+
   if (!loading && account?.status === "PENDING") {
     return (
       <div className="flex flex-col gap-4">
@@ -278,24 +189,15 @@ function CorporateDashboard() {
     );
   }
 
-  if (!loading && vendor) {
-    return <VendorDashboard userName={user?.displayName} role={user?.role} />;
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
         title={user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
-        description={
-          vendor
-            ? "Bills Paytrix assigns to you are under Assigned bills. Mark one paid after you pay the biller."
-            : "Pay due bills from the wallet, and see what is still open."
-        }
+        description="Pay due bills from the wallet, and see what is still open."
         actions={user?.role ? <StatusBadge status={user.role} /> : undefined}
       />
 
-      <div className={vendor ? "grid grid-cols-1 gap-4" : "grid grid-cols-1 gap-4 lg:grid-cols-2"}>
-        {!vendor && (
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-xs sm:p-5">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -317,13 +219,12 @@ function CorporateDashboard() {
               <Wallet size={16} />
             </span>
           </div>
-          {user?.role === "CLIENT_ADMIN" && !vendor && (
+          {user?.role === "CLIENT_ADMIN" && (
             <Button icon={<Plus size={16} />} onClick={() => router.push("/client/wallet")}>
               Top up wallet
             </Button>
           )}
         </section>
-        )}
 
         <section
           className={
@@ -354,11 +255,9 @@ function CorporateDashboard() {
               <Clock size={16} />
             </span>
           </div>
-          {!vendor && (
-            <Button icon={<Send size={16} />} onClick={() => router.push("/client/my-dues")}>
-              {pending > 0 ? "Pay bills" : "My Payments"}
-            </Button>
-          )}
+          <Button icon={<Send size={16} />} onClick={() => router.push("/client/my-dues")}>
+            {pending > 0 ? "Pay bills" : "My Payments"}
+          </Button>
         </section>
       </div>
 
@@ -394,16 +293,16 @@ function CorporateDashboard() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <button
           type="button"
-          onClick={() => router.push(vendor ? "/client/assigned-bills" : "/client/managed-bills")}
+          onClick={() => router.push("/client/managed-bills")}
           className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
             <FileText size={16} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-900">{vendor ? "Assigned bills" : "Managed bills"}</span>
+            <span className="block text-sm font-semibold text-slate-900">Managed bills</span>
             <span className="mt-0.5 block text-xs text-slate-500">
-              {vendor ? "Pay the biller, then mark the bill paid for Paytrix to verify." : "Add a bill and follow each cycle."}
+              Add a bill and follow each cycle.
             </span>
           </span>
           <ChevronRight size={16} className="shrink-0 text-slate-300" />

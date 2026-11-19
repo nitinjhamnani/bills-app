@@ -98,10 +98,10 @@ export default function OrganisationManagedBillDetailsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Link
-        href="/paytrix/managed-bills"
+        href="/paytrix/bill-dues"
         className="mb-2 inline-flex shrink-0 items-center gap-1 text-xs font-medium text-slate-500 hover:text-accent"
       >
-        <ArrowLeft size={14} /> Back to managed bills
+        <ArrowLeft size={14} /> Back to bill dues
       </Link>
 
       <div className="mb-4 flex shrink-0 flex-wrap items-start justify-between gap-4">

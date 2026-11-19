@@ -191,7 +191,7 @@ export default function ClientWalletPage() {
       .then((account) => {
         if (cancelled) return;
         if (account.clientType === "VENDOR") {
-          router.replace("/client/dashboard");
+          router.replace("/vendor/dashboard");
           return;
         }
         setReady(true);

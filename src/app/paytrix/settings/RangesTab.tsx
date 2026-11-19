@@ -17,7 +17,8 @@ import { formatRange, type CommissionRange } from "../commissions/format";
 
 export function RangesTab({ onCount }: { onCount?: (count: number) => void }) {
   const toast = useToast();
-  const canAdd = getUser()?.role === "ORGANISATION_ADMIN";
+  const currentRole = getUser()?.role;
+  const canAdd = currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
   const [ranges, setRanges] = useState<CommissionRange[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
