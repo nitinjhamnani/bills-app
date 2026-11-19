@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Clock, Wallet, History, PieChart, ArrowUpCircle } from "lucide-react";
+import { FileText, Clock, Wallet, History, PieChart, ArrowUpCircle, GitBranch } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReportCatalog } from "@/components/reports/ReportCatalog";
 
@@ -27,6 +27,12 @@ export default function ClientReportsPage() {
                 label: "Payment History",
                 description: "Bills you paid from the wallet, by paid date.",
                 icon: History,
+              },
+              {
+                href: "/client/reports/bills-by-branch",
+                label: "Bills by branch",
+                description: "Bills paid from the wallet, listed for each branch, with a total per branch.",
+                icon: GitBranch,
               },
               {
                 href: "/client/reports/spend-by-service",

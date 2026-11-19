@@ -1,66 +1,69 @@
 "use client";
 
-import { Building2, Send, IndianRupee, Wallet, Clock, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowLeftRight, BadgeCheck, Building2, Store, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ReportCatalog } from "@/components/reports/ReportCatalog";
+import { getUser } from "@/lib/auth";
+import { isOrgAdmin } from "@/lib/types";
 
 export default function OrganisationReportsPage() {
+  const [admin, setAdmin] = useState(false);
+  useEffect(() => {
+    setAdmin(isOrgAdmin(getUser()?.role));
+  }, []);
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title="Reports"
-        description="Generate and export reports across every client Paytrix serves."
-      />
+      <PageHeader title="Reports" description="Reports for the companies Paytrix serves." />
       <ReportCatalog
         sections={[
           {
-            title: "Clients",
+            title: "Business",
             items: [
               {
-                href: "/paytrix/reports/client-portfolio",
-                label: "Client Portfolio",
-                description: "Every client, wallet balance, outstanding, and lifetime settled volume.",
+                href: "/paytrix/reports/corporate-business",
+                label: "Corporate business",
+                description: "Bills each company raised and bills paid to the biller, with amounts.",
                 icon: Building2,
               },
               {
-                href: "/paytrix/reports/gmv-by-client",
-                label: "GMV by Client",
-                description: "Client-paid and org-settled volume in a date range.",
-                icon: TrendingUp,
+                href: "/paytrix/reports/vendor-business",
+                label: "Vendor business",
+                description: "Bills assigned to each vendor and bills that vendor paid, with amounts.",
+                icon: Store,
+              },
+              {
+                href: "/paytrix/reports/sales-business",
+                label: "Sales business",
+                description: "Bills paid by the companies assigned to each sales person, with a total per person.",
+                icon: Users,
               },
             ],
           },
+          ...(admin
+            ? [
+                {
+                  title: "Money",
+                  items: [
+                    {
+                      href: "/paytrix/reports/transactions",
+                      label: "Transactions",
+                      description: "Money in and money out for each What on the Transactions list.",
+                      icon: ArrowLeftRight,
+                    },
+                  ],
+                },
+              ]
+            : []),
           {
-            title: "Bills & Settlement",
+            title: "Bills",
             items: [
               {
-                href: "/paytrix/reports/settlement-pipeline",
-                label: "Settlement Register",
-                description: "Bills in the settlement queue or settled in a date range.",
-                icon: Send,
-              },
-              {
-                href: "/paytrix/reports/aging",
-                label: "Aging / Stuck Queue",
-                description: "Bills waiting for pick-up or still in process, oldest first.",
-                icon: Clock,
-              },
-            ],
-          },
-          {
-            title: "Wallets & Revenue",
-            items: [
-              {
-                href: "/paytrix/reports/revenue",
-                label: "Revenue Report",
-                description: "Convenience fee income earned, by client and period.",
-                icon: IndianRupee,
-              },
-              {
-                href: "/paytrix/reports/funding",
-                label: "Wallet Funding",
-                description: "Top-up requests and manual wallet credits in a date range.",
-                icon: Wallet,
+                href: "/paytrix/reports/verified-vendor-payments",
+                label: "Bills Paid",
+                description: "Bills a company raised that a vendor paid and Paytrix verified.",
+                icon: BadgeCheck,
               },
             ],
           },

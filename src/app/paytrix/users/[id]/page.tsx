@@ -36,7 +36,7 @@ import { userInitials } from "@/components/UserMenu";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { ORGANISATION_ROLES, roleDescription } from "@/lib/roles";
-import type { AssignedCorporate, UserBranch } from "@/lib/types";
+import type { AssignedCorporate, Client, UserBranch } from "@/lib/types";
 
 type UserScope = "PLATFORM" | "CORPORATE" | "VENDOR";
 
@@ -118,6 +118,12 @@ export default function OrganisationUserDetailPage() {
   const [newPassword, setNewPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+
+  const [assignCorporateOpen, setAssignCorporateOpen] = useState(false);
+  const [availableCorporates, setAvailableCorporates] = useState<Client[]>([]);
+  const [corporatesLoading, setCorporatesLoading] = useState(false);
+  const [selectedCorporateIds, setSelectedCorporateIds] = useState<string[]>([]);
+  const [savingCorporates, setSavingCorporates] = useState(false);
 
   const [assignBranchOpen, setAssignBranchOpen] = useState(false);
   const [availableBranches, setAvailableBranches] = useState<BranchOption[]>([]);
@@ -223,6 +229,46 @@ export default function OrganisationUserDetailPage() {
       toast.error(err instanceof ApiError ? err.message : "Failed to set password");
     } finally {
       setSavingPassword(false);
+    }
+  }
+
+  async function openAssignCorporateModal() {
+    if (!user) return;
+    setSelectedCorporateIds((user.corporates ?? []).map((corporate) => corporate.id));
+    setAssignCorporateOpen(true);
+    setCorporatesLoading(true);
+    try {
+      const rows = await apiFetch<Client[]>("/api/v1/paytrix/clients");
+      setAvailableCorporates(rows.filter((row) => row.clientType === "CORPORATE"));
+    } catch (err) {
+      setAvailableCorporates([]);
+      toast.error(err instanceof ApiError ? err.message : "Failed to load corporates");
+    } finally {
+      setCorporatesLoading(false);
+    }
+  }
+
+  function toggleCorporateSelection(clientId: string) {
+    setSelectedCorporateIds((prev) =>
+      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId],
+    );
+  }
+
+  async function saveCorporateAssignment(event: React.FormEvent) {
+    event.preventDefault();
+    setSavingCorporates(true);
+    try {
+      const updated = await apiFetch<UserDetail>(`/api/v1/paytrix/users/${userId}/corporates`, {
+        method: "PUT",
+        body: { clientIds: selectedCorporateIds },
+      });
+      setUser(updated);
+      toast.success("Corporate assignment updated");
+      setAssignCorporateOpen(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update corporate assignment");
+    } finally {
+      setSavingCorporates(false);
     }
   }
 
@@ -712,7 +758,12 @@ export default function OrganisationUserDetailPage() {
               <Card>
                 <CardHeader
                   title="Assigned corporates"
-                  description="Corporates linked to this sales representative."
+                  description="Companies this sales person looks after."
+                  actions={
+                    <Button size="sm" icon={<Plus size={14} />} onClick={openAssignCorporateModal}>
+                      Assign
+                    </Button>
+                  }
                 />
                 <div className="px-5 py-4">
                   {(user.corporates ?? []).length === 0 ? (
@@ -723,7 +774,7 @@ export default function OrganisationUserDetailPage() {
                       <div>
                         <p className="font-medium text-slate-700">No corporates assigned</p>
                         <p className="text-xs text-slate-400">
-                          Assign this sales person from a corporate&apos;s Overview tab.
+                          Assign the companies this sales person looks after.
                         </p>
                       </div>
                     </div>
@@ -885,6 +936,89 @@ export default function OrganisationUserDetailPage() {
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="At least 6 characters"
           />
+        </form>
+      </Modal>
+
+      <Modal
+        open={assignCorporateOpen}
+        onClose={() => !savingCorporates && setAssignCorporateOpen(false)}
+        title="Assign corporates"
+        description={
+          user ? `Select the companies ${user.fullName} looks after. A company can have one sales person.` : undefined
+        }
+        footer={
+          <>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setAssignCorporateOpen(false)}
+              disabled={savingCorporates}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="user-detail-assign-corporates-form"
+              loading={savingCorporates}
+              disabled={corporatesLoading || availableCorporates.length === 0}
+            >
+              Save
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="user-detail-assign-corporates-form"
+          onSubmit={saveCorporateAssignment}
+          className="flex flex-col gap-3"
+        >
+          {corporatesLoading ? (
+            <p className="text-sm text-slate-500">Loading corporates...</p>
+          ) : availableCorporates.length === 0 ? (
+            <p className="text-sm text-slate-500">No corporates have been created yet.</p>
+          ) : (
+            <div className="flex max-h-64 flex-col gap-2 overflow-y-auto">
+              {availableCorporates.map((corporate) => {
+                const selected = selectedCorporateIds.includes(corporate.id);
+                const heldBySomeoneElse =
+                  corporate.salesUserId && corporate.salesUserId !== userId
+                    ? corporate.salesPersonName
+                    : null;
+                return (
+                  <button
+                    key={corporate.id}
+                    type="button"
+                    onClick={() => toggleCorporateSelection(corporate.id)}
+                    className={cn(
+                      "flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors",
+                      selected
+                        ? "border-indigo-400 bg-indigo-50/70 text-indigo-950 ring-1 ring-indigo-500/20"
+                        : "border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50",
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                          selected ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-500",
+                        )}
+                      >
+                        <Building2 size={15} />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{corporate.clientName}</p>
+                        <p className="font-mono text-[11px] text-slate-500">{corporate.clientCode ?? corporate.id}</p>
+                        {heldBySomeoneElse && (
+                          <p className="text-[11px] text-amber-700">Currently with {heldBySomeoneElse}</p>
+                        )}
+                      </div>
+                    </div>
+                    {selected && <Check size={16} className="shrink-0 text-indigo-600" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </form>
       </Modal>
 
