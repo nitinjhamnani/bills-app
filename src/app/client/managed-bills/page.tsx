@@ -374,7 +374,7 @@ export default function ManagedBillsPage() {
         open={bulkModalOpen}
         onClose={() => setBulkModalOpen(false)}
         title="Bulk upload"
-        description="Download the template, fill in category, biller, and consumer number, then upload it. Each row is created and fetched."
+        description="Download the template and pick the category and service provider from the lists in the spreadsheet. Then enter the consumer number and upload it. Each row is created and fetched."
       >
         <div className="flex flex-col gap-4">
           <Button

@@ -520,37 +520,6 @@ export interface WalletStatement {
   entries: BillLedgerEntry[];
 }
 
-export interface ClientPortfolioRow {
-  clientId: string;
-  clientName: string;
-  clientCode: string | null;
-  clientType: ClientType;
-  status: "ACTIVE" | "SUSPENDED" | "TERMINATED";
-  createdAt: string;
-  walletBalance: number | null;
-  totalBillPayments: number;
-  totalPaidAmount: number;
-  outstandingAmount: number;
-  pendingSettlementAmount: number;
-}
-
-export interface RevenueRow {
-  clientId: string;
-  clientName: string;
-  clientCode: string | null;
-  amount: number;
-  description: string | null;
-  createdAt: string;
-}
-
-export interface RevenueByClientRow {
-  clientId: string;
-  clientName: string;
-  clientCode: string | null;
-  feeCount: number;
-  totalAmount: number;
-}
-
 export interface FundingRow {
   id: string;
   clientId: string;
@@ -566,38 +535,58 @@ export interface FundingRow {
   updatedAt: string;
 }
 
-export interface AdjustmentRow {
-  clientId: string;
-  clientName: string;
-  clientCode: string | null;
-  amount: number;
-  description: string | null;
-  createdAt: string;
+export interface TransactionCategoryRow {
+  what: string;
+  moneyIn: number;
+  moneyOut: number;
 }
 
-export interface AgingRow {
-  paymentId: string;
+export interface CorporateBusinessRow {
+  corpId: string;
+  corpName: string;
+  billsRaised: number;
+  raisedAmount: number;
+  billsPaid: number;
+  paidAmount: number;
+}
+
+export interface SalesBusinessRow {
+  salesUserId: string;
+  salesPersonName: string;
+  corpId: string | null;
+  corpName: string | null;
+  billsPaid: number;
+  paidAmount: number;
+  salesBillsPaid: number;
+  salesPaidAmount: number;
+}
+
+export interface VendorBusinessRow {
+  vendorId: string;
+  vendorName: string;
+  billsAssigned: number;
+  assignedAmount: number;
+  billsPaid: number;
+  paidAmount: number;
+}
+
+export interface VerifiedVendorPaymentRow {
+  corpId: string;
+  corpName: string;
+  paidById: string;
+  paidByName: string;
   billId: string;
-  clientId: string;
-  clientName: string;
-  clientCode: string | null;
-  billerName: string;
-  customerBillAccountNumber: string;
-  amount: number;
-  orgStatus: OrgStatus;
-  stuckSince: string;
-  daysStuck: number;
-  dueDate: string | null;
+  billAmount: number;
+  paidOn: string;
 }
 
-export interface ClientGmvRow {
-  clientId: string;
-  clientName: string;
-  clientCode: string | null;
-  clientPaidCount: number;
-  clientPaidAmount: number;
-  orgSettledCount: number;
-  orgSettledAmount: number;
+export interface BranchBillsRow {
+  branchId: string;
+  branchName: string;
+  billId: string | null;
+  billAmount: number | null;
+  branchBills: number;
+  branchTotal: number;
 }
 
 export interface SpendByServiceRow {
