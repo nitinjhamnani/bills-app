@@ -82,9 +82,9 @@ function displayRole(user: UserDetail | null) {
     return ORGANISATION_ROLES.find((item) => item.value === user.role)?.label ?? user.role;
   }
   if (user.scope === "CORPORATE") {
-    return user.role === "CLIENT_ADMIN" ? "Corporate Admin" : "Branch User";
+    return user.role === "CORP_ADMIN" ? "Corporate Admin" : "Branch User";
   }
-  return user.role === "CLIENT_ADMIN" ? "Vendor Admin" : "Vendor Operator";
+  return user.role === "VENDOR_ADMIN" ? "Vendor Admin" : "Vendor Operator";
 }
 
 function scopeLabel(scope: UserScope | undefined) {
@@ -330,21 +330,21 @@ export default function OrganisationUserDetailPage() {
     user?.scope === "VENDOR"
       ? [
           {
-            value: "CLIENT_ADMIN",
+            value: "VENDOR_ADMIN",
             title: "Vendor Admin",
             subtitle: "Manages assigned bills, settlements, and users",
             icon: ShieldCheck,
           },
           {
-            value: "CLIENT_OPERATOR",
+            value: "VENDOR_OPERATOR",
             title: "Vendor Operator",
-            subtitle: "Works on assigned bills and marks them paid",
+            subtitle: "Views assigned bills and settlement progress",
             icon: UserCheck,
           },
         ]
       : [
           {
-            value: "CLIENT_ADMIN",
+            value: "CORP_ADMIN",
             title: "Corporate Admin",
             subtitle: "Full access to bills, branches, wallet, and users",
             icon: ShieldCheck,
@@ -410,7 +410,7 @@ export default function OrganisationUserDetailPage() {
                     <KeyRound size={14} className="text-slate-400" />
                     Set password
                   </button>
-                  {user.scope === "CORPORATE" && user.role !== "CLIENT_ADMIN" && (
+                  {user.scope === "CORPORATE" && user.role !== "CORP_ADMIN" && (
                     <button
                       type="button"
                       role="menuitem"
@@ -654,12 +654,12 @@ export default function OrganisationUserDetailPage() {
                   <CardHeader
                     title="Assigned branches"
                     description={
-                      user.role === "CLIENT_ADMIN"
+                      user.role === "CORP_ADMIN"
                         ? "Corporate admins have full access to all branches."
                         : "Branches this user is authorized to manage bills for."
                     }
                     actions={
-                      user.role !== "CLIENT_ADMIN" ? (
+                      user.role !== "CORP_ADMIN" ? (
                         <Button
                           size="sm"
                           icon={<Plus size={14} />}
@@ -671,7 +671,7 @@ export default function OrganisationUserDetailPage() {
                     }
                   />
                   <div className="px-5 py-4">
-                    {user.role === "CLIENT_ADMIN" ? (
+                    {user.role === "CORP_ADMIN" ? (
                       <div className="flex items-center gap-3 text-sm text-slate-600">
                         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
                           <ShieldCheck size={16} />

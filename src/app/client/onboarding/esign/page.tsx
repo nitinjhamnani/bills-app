@@ -10,7 +10,7 @@ import type { ClientAccount } from "@/lib/types";
 
 export default function EsignPage() {
   const toast = useToast();
-  const admin = getUser()?.role === "CLIENT_ADMIN";
+  const admin = getUser()?.role === "CORP_ADMIN";
   const [account, setAccount] = useState<ClientAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);

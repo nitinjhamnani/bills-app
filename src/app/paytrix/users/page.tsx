@@ -68,9 +68,9 @@ function displayRole(user: DirectoryUser) {
     return ORGANISATION_ROLES.find((item) => item.value === user.role)?.label ?? user.role;
   }
   if (user.scope === "CORPORATE") {
-    return user.role === "CLIENT_ADMIN" ? "Corporate Admin" : "Branch User";
+    return user.role === "CORP_ADMIN" ? "Corporate Admin" : "Branch User";
   }
-  return user.role === "CLIENT_ADMIN" ? "Vendor Admin" : "Vendor Operator";
+  return user.role === "VENDOR_ADMIN" ? "Vendor Admin" : "Vendor Operator";
 }
 
 export default function OrganisationUsersPage() {
@@ -104,7 +104,7 @@ export default function OrganisationUsersPage() {
   });
   const [clientUserForm, setClientUserForm] = useState({
     clientId: "",
-    role: "CLIENT_ADMIN",
+    role: "CORP_ADMIN",
     branchId: "",
     fullName: "",
     phoneNumber: "",
@@ -187,7 +187,7 @@ export default function OrganisationUsersPage() {
     } else {
       setClientUserForm({
         clientId: "",
-        role: "CLIENT_ADMIN",
+        role: scopeTab === "VENDOR" ? "VENDOR_ADMIN" : "CORP_ADMIN",
         branchId: "",
         fullName: "",
         phoneNumber: "",
@@ -245,7 +245,7 @@ export default function OrganisationUsersPage() {
           clientUserForm.branchId
             ? { branchId: clientUserForm.branchId }
             : {}),
-          ...(clientUserForm.password.trim() ? { password: clientUserForm.password } : {}),
+          password: clientUserForm.password,
         },
       });
       toast.success(`${clientUserForm.fullName.trim()} added`);
@@ -362,21 +362,21 @@ export default function OrganisationUsersPage() {
     scopeTab === "VENDOR"
       ? [
           {
-            value: "CLIENT_ADMIN",
+            value: "VENDOR_ADMIN",
             title: "Vendor Admin",
             subtitle: "Manages assigned bills, settlements, and users",
             icon: ShieldCheck,
           },
           {
-            value: "CLIENT_OPERATOR",
+            value: "VENDOR_OPERATOR",
             title: "Vendor Operator",
-            subtitle: "Works on assigned bills and marks them paid",
+            subtitle: "Views assigned bills and settlement progress",
             icon: UserCheck,
           },
         ]
       : [
           {
-            value: "CLIENT_ADMIN",
+            value: "CORP_ADMIN",
             title: "Corporate Admin",
             subtitle: "Full access to bills, branches, wallet, and users",
             icon: ShieldCheck,
@@ -565,7 +565,7 @@ export default function OrganisationUsersPage() {
                           )}
                         </TD>
                         <TD className="text-xs text-slate-700">
-                          {user.role === "CLIENT_ADMIN" ? (
+                          {user.role === "CORP_ADMIN" ? (
                             <span className="text-slate-400">All branches</span>
                           ) : (user.branches ?? []).length > 0 ? (
                             <div className="flex flex-wrap gap-1">
@@ -929,8 +929,8 @@ export default function OrganisationUsersPage() {
             />
             <PasswordField
               label="Password"
+              required
               minLength={6}
-              hint="Optional. Leave blank if they will set their own password on first sign-in."
               value={clientUserForm.password}
               onChange={(e) =>
                 setClientUserForm({ ...clientUserForm, password: e.target.value })

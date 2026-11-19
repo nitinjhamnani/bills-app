@@ -12,12 +12,12 @@ export default function VendorUsersPage() {
   const clientId = user?.clientId ?? "";
 
   useEffect(() => {
-    if (user?.role !== "CLIENT_ADMIN") {
+    if (user?.role !== "VENDOR_ADMIN") {
       router.replace("/vendor/dashboard");
     }
   }, [router, user?.role]);
 
-  if (!clientId || user?.role !== "CLIENT_ADMIN") return null;
+  if (!clientId || user?.role !== "VENDOR_ADMIN") return null;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">

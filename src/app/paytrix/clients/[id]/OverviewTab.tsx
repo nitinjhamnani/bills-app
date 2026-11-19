@@ -114,7 +114,7 @@ export function OverviewTab({
     setUsersLoading(true);
     try {
       const rows = await apiFetch<ClientUser[]>(`/api/v1/paytrix/clients/${clientId}/users`);
-      setAdminUsers(rows.filter((u) => u.role === "CLIENT_ADMIN"));
+      setAdminUsers(rows.filter((u) => u.role === "CORP_ADMIN"));
     } catch {
       setAdminUsers([]);
     } finally {
@@ -137,8 +137,8 @@ export function OverviewTab({
         body: {
           fullName: adminForm.fullName.trim(),
           phoneNumber: adminForm.phoneNumber,
-          role: "CLIENT_ADMIN",
-          ...(adminForm.password.trim() ? { password: adminForm.password } : {}),
+          role: "CORP_ADMIN",
+          password: adminForm.password,
         },
       });
       toast.success(`${adminForm.fullName.trim()} added as Admin`);
@@ -570,8 +570,8 @@ export function OverviewTab({
           />
           <PasswordField
             label="Password"
+            required
             minLength={6}
-            hint="Optional. Leave blank if they will set their own password on first sign-in."
             value={adminForm.password}
             onChange={(event) => setAdminForm({ ...adminForm, password: event.target.value })}
             placeholder="At least 6 characters"

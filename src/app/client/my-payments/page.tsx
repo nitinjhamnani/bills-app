@@ -88,7 +88,7 @@ export default function ClientMyPaymentsPage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <PageHeader title="My Payments" description="Bills you have paid, and where each payment is now." />
+      <PageHeader title="Bill Payments" description="Bills you have paid, and where each payment is now." />
 
       <div className="flex shrink-0 flex-col gap-3 rounded-xl bg-slate-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
         <span className="text-xs font-semibold text-slate-700">
@@ -119,7 +119,7 @@ export default function ClientMyPaymentsPage() {
             icon={FileText}
             title={payments.length === 0 ? "No payments yet" : "No payments match"}
             description={
-              payments.length === 0 ? "Bills you pay from My Dues show up here." : "Try another biller or consumer number."
+              payments.length === 0 ? "Bills you pay from Bill Dues show up here." : "Try another biller or consumer number."
             }
           />
         ) : (

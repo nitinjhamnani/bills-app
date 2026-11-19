@@ -12,7 +12,7 @@ import type { ClientAccount } from "@/lib/types";
 export default function VendorEsignPage() {
   const router = useRouter();
   const toast = useToast();
-  const admin = getUser()?.role === "CLIENT_ADMIN";
+  const admin = getUser()?.role === "VENDOR_ADMIN";
   const [account, setAccount] = useState<ClientAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);

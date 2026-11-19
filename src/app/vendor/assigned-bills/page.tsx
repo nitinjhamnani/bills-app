@@ -54,7 +54,7 @@ function holding(bill: BillPayment) {
 
 export default function AssignedBillsPage() {
   const toast = useToast();
-  const canMark = getUser()?.role === "CLIENT_ADMIN";
+  const canMark = getUser()?.role === "VENDOR_ADMIN";
   const fileRef = useRef<HTMLInputElement>(null);
   const [account, setAccount] = useState<ClientAccount | null>(null);
   const [bills, setBills] = useState<BillPayment[]>([]);

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, LogOut, UserRound } from "lucide-react";
-import { clearSession } from "@/lib/auth";
+import { logoutSession } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/StatusBadge";
 import type { UserProfile } from "@/lib/types";
@@ -76,8 +76,9 @@ export function UserMenu({
     };
   }, [open]);
 
-  function handleLogout() {
-    clearSession();
+  async function handleLogout() {
+    setOpen(false);
+    await logoutSession();
     router.replace("/login");
   }
 

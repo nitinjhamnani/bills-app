@@ -35,7 +35,7 @@ export default function VendorDashboardPage() {
   const router = useRouter();
   const toast = useToast();
   const user = getUser();
-  const canAct = user?.role === "CLIENT_ADMIN";
+  const canAct = user?.role === "VENDOR_ADMIN";
   const [account, setAccount] = useState<ClientAccount | null>(null);
   const [bills, setBills] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);

@@ -9,7 +9,7 @@ import { API_BASE_URL } from "@/lib/workspace";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
+import { Field, PasswordField } from "@/components/ui/Field";
 import { UserMultiSelect, type PoolUser } from "./UserMultiSelect";
 import { Modal } from "@/components/ui/Modal";
 import { ListCard } from "@/components/ui/Card";
@@ -44,6 +44,7 @@ const emptyForm = {
   code: "",
   userName: "",
   phoneNumber: "",
+  userPassword: "",
 };
 
 export default function BranchesPage() {
@@ -180,9 +181,12 @@ export default function BranchesPage() {
         setBusy(false);
         return;
       }
-      const addingNew = form.userName.trim().length > 0 || form.phoneNumber.length > 0;
-      if (addingNew && (!form.userName.trim() || form.phoneNumber.length !== 10)) {
-        toast.error("Enter the user's name and a 10-digit phone");
+      const addingNew =
+        form.userName.trim().length > 0 ||
+        form.phoneNumber.length > 0 ||
+        form.userPassword.length > 0;
+      if (addingNew && (!form.userName.trim() || form.phoneNumber.length !== 10 || form.userPassword.length < 6)) {
+        toast.error("Enter the user's name, 10-digit phone, and a password of at least 6 characters");
         setBusy(false);
         return;
       }
@@ -195,10 +199,16 @@ export default function BranchesPage() {
           location: form.location,
           code: form.code,
           ...(selectedIds.length > 0 ? { userIds: selectedIds } : {}),
-          ...(addingNew ? { userName: form.userName, phoneNumber: form.phoneNumber } : {}),
+          ...(addingNew
+            ? {
+                userName: form.userName,
+                phoneNumber: form.phoneNumber,
+                userPassword: form.userPassword,
+              }
+            : {}),
         },
       });
-      toast.success(addingNew ? "Branch created. The new user signs in with Password@123." : "Branch created");
+      toast.success(addingNew ? "Branch and user created" : "Branch created");
       setForm(emptyForm);
       setCreating(false);
       router.push(`/client/branches/${created.id}`);
@@ -347,7 +357,7 @@ export default function BranchesPage() {
               <div>
                 <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">New user</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Optional. Leave both blank to skip. A new user signs in with Password@123.
+                  Optional. Leave all three fields blank to skip creating a new user.
                 </p>
               </div>
               <Field
@@ -364,6 +374,13 @@ export default function BranchesPage() {
                 value={form.phoneNumber}
                 onChange={(e) => setField("phoneNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
               />
+              <PasswordField
+                label="User password"
+                minLength={6}
+                placeholder="At least 6 characters"
+                value={form.userPassword}
+                onChange={(e) => setField("userPassword", e.target.value)}
+              />
             </div>
           </form>
         )}
@@ -373,7 +390,7 @@ export default function BranchesPage() {
         open={bulkOpen}
         onClose={() => !bulkUploading && setBulkOpen(false)}
         title="Bulk upload"
-        description="One row per branch. Name, address, and code come first. User name and phone are optional: leave both blank, or fill both. A new user signs in with Password@123. Delete the sample row before you upload."
+        description="One row per branch. Name, address, and code come first. User name, phone, and password are optional: leave all three blank, or fill all three. Delete the sample row before you upload."
       >
         <div className="flex flex-col gap-4">
           <Button

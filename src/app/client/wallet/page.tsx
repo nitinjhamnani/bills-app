@@ -137,10 +137,10 @@ export default function ClientWalletPage() {
   const user = getUser();
   const clientId = user?.clientId ?? "";
   const clientName = user?.displayName ?? "Wallet";
-  const canTopUp = user?.role === "CLIENT_ADMIN";
+  const canTopUp = user?.role === "CORP_ADMIN";
 
   useEffect(() => {
-    if (user?.role === "CLIENT_OPERATOR") {
+    if (user?.role === "CORP_OPERATOR" || user?.role === "BRANCH_USER") {
       router.replace("/client/dashboard");
     }
   }, [router, user?.role]);
@@ -185,15 +185,11 @@ export default function ClientWalletPage() {
   }
 
   useEffect(() => {
-    if (user?.role === "CLIENT_OPERATOR") return;
+    if (user?.role === "CORP_OPERATOR" || user?.role === "BRANCH_USER") return;
     let cancelled = false;
     apiFetch<ClientAccount>("/api/v1/client/account")
-      .then((account) => {
+      .then(() => {
         if (cancelled) return;
-        if (account.clientType === "VENDOR") {
-          router.replace("/vendor/dashboard");
-          return;
-        }
         setReady(true);
         load();
       })
@@ -289,7 +285,7 @@ export default function ClientWalletPage() {
   const canSubmit = Number(form.amount) > 0 && form.paymentReference.trim().length > 0 && proof !== null;
   const requestedAmount = Number(form.amount);
 
-  if (user?.role === "CLIENT_OPERATOR" || !ready) return null;
+  if (user?.role === "CORP_OPERATOR" || user?.role === "BRANCH_USER" || !ready) return null;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">

@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Receipt,
   Send,
+  Settings,
   Users,
   BarChart3,
 } from "lucide-react";
@@ -18,18 +19,19 @@ import { AppShell, type NavLink } from "@/components/AppShell";
 import { ClientSupportFab } from "@/components/support/ClientSupportFab";
 import { useSupportUnreadCount } from "@/lib/support-unread";
 import { apiFetch } from "@/lib/api-client";
-import { isVendorUser, type ClientAccount, type Role, type UserProfile } from "@/lib/types";
+import type { ClientAccount, Role, UserProfile } from "@/lib/types";
 
 const CORPORATE_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/client/wallet", label: "Wallet", icon: Wallet, roles: ["CLIENT_ADMIN"] },
-  { href: "/client/branches", label: "Branches", icon: GitBranch, roles: ["CLIENT_ADMIN"] },
-  { href: "/client/managed-bills", label: "Managed Bills", icon: FileText },
-  { href: "/client/my-dues", label: "My Dues", icon: Receipt },
-  { href: "/client/my-payments", label: "My Payments", icon: Send },
-  { href: "/client/support", label: "Support", icon: MessageCircle },
-  { href: "/client/reports", label: "Reports", icon: BarChart3, roles: ["CLIENT_ADMIN"] },
-  { href: "/client/users", label: "Users", icon: Users, roles: ["CLIENT_ADMIN"] },
+  { href: "/client/my-payments", label: "Bill Payments", icon: Send },
+  { href: "/client/managed-bills", label: "Manage Bills", icon: FileText, group: "Bills" },
+  { href: "/client/my-dues", label: "Bill Dues", icon: Receipt, group: "Bills" },
+  { href: "/client/wallet", label: "Wallet", icon: Wallet, group: "Management", roles: ["CORP_ADMIN"] },
+  { href: "/client/branches", label: "Branches", icon: GitBranch, group: "Management", roles: ["CORP_ADMIN"] },
+  { href: "/client/users", label: "Users", icon: Users, group: "Management", roles: ["CORP_ADMIN"] },
+  { href: "/client/reports", label: "Reports", icon: BarChart3, group: "Management", roles: ["CORP_ADMIN"] },
+  { href: "/client/support", label: "Support", icon: MessageCircle, group: "Support & Settings" },
+  { href: "/client/settings", label: "Settings", icon: Settings, group: "Support & Settings" },
 ];
 
 function ClientShell({
@@ -45,7 +47,6 @@ function ClientShell({
   const pathname = usePathname();
   const router = useRouter();
   const [account, setAccount] = useState<ClientAccount | null>(null);
-  const vendorRedirect = isVendorUser(user) || account?.clientType === "VENDOR";
   const branchBlocked =
     user.role === "BRANCH_USER" &&
     ["/client/wallet", "/client/reports", "/client/users", "/client/branches", "/client/rules"].some(
@@ -53,19 +54,10 @@ function ClientShell({
     );
 
   useEffect(() => {
-    if (isVendorUser(user)) {
-      router.replace("/vendor/dashboard");
-      return;
-    }
     apiFetch<ClientAccount>("/api/v1/client/account")
-      .then((next) => {
-        setAccount(next);
-        if (next.clientType === "VENDOR") {
-          router.replace("/vendor/dashboard");
-        }
-      })
+      .then((next) => setAccount(next))
       .catch(() => setAccount(null));
-  }, [router, user]);
+  }, [user.userId]);
 
   const pending = account?.status === "PENDING";
   useEffect(() => {
@@ -79,8 +71,6 @@ function ClientShell({
     if (branchBlocked) router.replace("/client/dashboard");
   }, [branchBlocked, router]);
 
-  if (vendorRedirect) return null;
-
   const links =
     account == null || pending
       ? [{ href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard }]
@@ -91,7 +81,7 @@ function ClientShell({
 
   return (
     <>
-      <AppShell user={user} moduleLabel="Client" nav={nav}>
+      <AppShell user={user} moduleLabel="Corporate" nav={nav}>
         {account?.status === "SUSPENDED" && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             This account is suspended. Paytrix has to reactivate it before you can transact.
@@ -110,7 +100,7 @@ export default function ClientLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthGuard allowedRoles={["CLIENT_ADMIN", "CLIENT_OPERATOR", "BRANCH_USER"]}>
+    <AuthGuard portal="CORPORATE" allowedRoles={["CORP_ADMIN", "CORP_OPERATOR", "BRANCH_USER"]}>
       {(user) => <ClientShell user={user}>{children}</ClientShell>}
     </AuthGuard>
   );

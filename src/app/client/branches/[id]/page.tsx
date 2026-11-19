@@ -8,7 +8,7 @@ import { getUser } from "@/lib/auth";
 import { StatusBadge } from "@/components/StatusBadge";
 import { userInitials } from "@/components/UserMenu";
 import { Button } from "@/components/ui/Button";
-import { Field } from "@/components/ui/Field";
+import { Field, PasswordField } from "@/components/ui/Field";
 import { UserMultiSelect, roleLabel, type PoolUser } from "../UserMultiSelect";
 import { Modal } from "@/components/ui/Modal";
 import { Card, CardHeader } from "@/components/ui/Card";
@@ -75,6 +75,7 @@ export default function BranchDetailPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [phone, setPhone] = useState("");
   const [userName, setUserName] = useState("");
+  const [userPassword, setUserPassword] = useState("");
   const [creatingBill, setCreatingBill] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(emptyEdit);
@@ -122,13 +123,13 @@ export default function BranchDetailPage() {
 
   async function addUser(e: React.FormEvent) {
     e.preventDefault();
-    const addingNew = userName.trim().length > 0 || phone.length > 0;
+    const addingNew = userName.trim().length > 0 || phone.length > 0 || userPassword.length > 0;
     if (selectedIds.length === 0 && !addingNew) {
-      toast.error("Choose users or enter a name and phone");
+      toast.error("Choose users or enter a name, phone, and password");
       return;
     }
-    if (addingNew && (!userName.trim() || phone.length !== 10)) {
-      toast.error("Enter the user's name and a 10-digit phone");
+    if (addingNew && (!userName.trim() || phone.length !== 10 || userPassword.length < 6)) {
+      toast.error("Enter the user's name, 10-digit phone, and a password of at least 6 characters");
       return;
     }
     setBusy(true);
@@ -142,12 +143,13 @@ export default function BranchDetailPage() {
       if (addingNew) {
         await apiFetch(`/api/v1/clients/${clientId}/branches/${branchId}/users`, {
           method: "POST",
-          body: { phoneNumber: phone, userName },
+          body: { phoneNumber: phone, userName, userPassword },
         });
       }
-      toast.success(addingNew ? "User added. They sign in with Password@123." : "Users added to this branch");
+      toast.success(addingNew ? "User added to this branch" : "Users added to this branch");
       setPhone("");
       setUserName("");
+      setUserPassword("");
       setSelectedIds([]);
       setAddingUser(false);
       await load();
@@ -412,7 +414,7 @@ export default function BranchDetailPage() {
             <div>
               <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">New user</p>
               <p className="mt-1 text-xs text-slate-500">
-                Optional. Leave both blank if you only chose existing users. A new user signs in with Password@123.
+                Optional. Leave all three fields blank if you only chose existing users.
               </p>
             </div>
             <Field
@@ -428,6 +430,13 @@ export default function BranchDetailPage() {
               placeholder="10-digit mobile number"
               value={phone}
               onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+            />
+            <PasswordField
+              label="User password"
+              minLength={6}
+              placeholder="At least 6 characters"
+              value={userPassword}
+              onChange={(e) => setUserPassword(e.target.value)}
             />
           </div>
         </form>

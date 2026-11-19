@@ -36,6 +36,10 @@ import { API_BASE_URL } from "@/lib/workspace";
 interface BillPaymentRow {
   id: string;
   billFetchId: string;
+  billId: string | null;
+  operatorName: string | null;
+  consumerId: string | null;
+  billFetchedOn: string | null;
   billAmount: number;
   corpPaymentOn: string;
   corpId: string;
@@ -120,6 +124,8 @@ export default function OrganisationBillPaymentsPage() {
 
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [selectedCorpId, setSelectedCorpId] = useState("ALL");
+  const [selectedOperator, setSelectedOperator] = useState("ALL");
+  const [consumerNumber, setConsumerNumber] = useState("");
   const [assignedToFilter, setAssignedToFilter] = useState<"ALL" | "ORG" | "VENDOR">("ALL");
   const [selectedAssigneeId, setSelectedAssigneeId] = useState("ALL");
   const [amountMin, setAmountMin] = useState("");
@@ -188,6 +194,14 @@ export default function OrganisationBillPaymentsPage() {
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [payments]);
 
+  const operatorOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of payments) {
+      if (p.operatorName) set.add(p.operatorName);
+    }
+    return Array.from(set).sort();
+  }, [payments]);
+
   const vendorOptions = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of payments) {
@@ -203,6 +217,13 @@ export default function OrganisationBillPaymentsPage() {
     if (selectedCorpId !== "ALL") {
       result = result.filter((p) => p.corpId === selectedCorpId);
     }
+    if (selectedOperator !== "ALL") {
+      result = result.filter((p) => p.operatorName === selectedOperator);
+    }
+    if (consumerNumber.trim()) {
+      const q = consumerNumber.trim().toLowerCase();
+      result = result.filter((p) => (p.consumerId ?? "").toLowerCase().includes(q));
+    }
     if (assignedToFilter !== "ALL") {
       result = result.filter((p) => p.billAssignedTo === assignedToFilter);
     }
@@ -215,6 +236,9 @@ export default function OrganisationBillPaymentsPage() {
         (p) =>
           p.id.toLowerCase().includes(q) ||
           p.billFetchId.toLowerCase().includes(q) ||
+          (p.billId ?? "").toLowerCase().includes(q) ||
+          (p.operatorName ?? "").toLowerCase().includes(q) ||
+          (p.consumerId ?? "").toLowerCase().includes(q) ||
           p.corpName.toLowerCase().includes(q) ||
           p.corpId.toLowerCase().includes(q) ||
           p.billAssignedToName.toLowerCase().includes(q) ||
@@ -228,6 +252,8 @@ export default function OrganisationBillPaymentsPage() {
   }, [
     payments,
     selectedCorpId,
+    selectedOperator,
+    consumerNumber,
     assignedToFilter,
     selectedAssigneeId,
     search,
@@ -260,6 +286,8 @@ export default function OrganisationBillPaymentsPage() {
   const amountRangeActive = Boolean(amountMin.trim() || amountMax.trim());
   const activeFilterCount = [
     selectedCorpId !== "ALL",
+    selectedOperator !== "ALL",
+    Boolean(consumerNumber.trim()),
     assignedToFilter !== "ALL",
     selectedAssigneeId !== "ALL",
     amountRangeActive,
@@ -286,6 +314,8 @@ export default function OrganisationBillPaymentsPage() {
 
   function resetFilters() {
     setSelectedCorpId("ALL");
+    setSelectedOperator("ALL");
+    setConsumerNumber("");
     setAssignedToFilter("ALL");
     setSelectedAssigneeId("ALL");
     setAmountMin("");
@@ -708,7 +738,7 @@ export default function OrganisationBillPaymentsPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Bill Payments"
-        description="Every bill payment made by corporates, fetched directly from the bill payment ledger."
+        description="Every bill payment made by corporates, fetched directly from the bill payment table."
         actions={
           <>
             <Button
@@ -786,6 +816,24 @@ export default function OrganisationBillPaymentsPage() {
               }}
             />
           )}
+          {selectedOperator !== "ALL" && (
+            <FilterChip
+              label={selectedOperator}
+              onClear={() => {
+                setSelectedOperator("ALL");
+                setCurrentPage(1);
+              }}
+            />
+          )}
+          {consumerNumber.trim() && (
+            <FilterChip
+              label={consumerNumber.trim()}
+              onClear={() => {
+                setConsumerNumber("");
+                setCurrentPage(1);
+              }}
+            />
+          )}
           {assignedToFilter !== "ALL" && (
             <FilterChip
               label={assignedToFilter === "VENDOR" ? "Assigned: Vendor" : "Assigned: Paytrix"}
@@ -838,7 +886,7 @@ export default function OrganisationBillPaymentsPage() {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search corporate, vendor, reference, or ID"
+              placeholder="Search corporate, bill code, operator, consumer ID, or vendor"
               className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
@@ -933,11 +981,11 @@ export default function OrganisationBillPaymentsPage() {
                     onChange={toggleSelectAll}
                     className="h-4 w-4 rounded border-slate-300"
                   />,
-                  "Corporate",
-                  "Assigned To",
+                  "Bill Code",
+                  "Operator",
+                  "Consumer",
                   "Amount",
                   "Status",
-                  "Reference",
                   "Corp Paid On",
                   "",
                 ]}
@@ -945,8 +993,6 @@ export default function OrganisationBillPaymentsPage() {
               <TBody>
                 {paged.map((p) => {
                   const expanded = expandedIds.has(p.id);
-                  const primaryRef =
-                    p.transactionReferenceNumber || p.bbpsExternalReference || null;
                   return (
                     <Fragment key={p.id}>
                       <TR className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
@@ -959,69 +1005,48 @@ export default function OrganisationBillPaymentsPage() {
                             className="h-4 w-4 rounded border-slate-300"
                           />
                         </TD>
-                        <TD>
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-slate-900">{p.corpName}</p>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              <button
-                                type="button"
-                                title="Copy corporate ID"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyText(`corp:${p.id}`, p.corpId, "corporate ID");
-                                }}
-                                className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                              >
-                                <span>{p.corpId}</span>
-                                {copiedKey === `corp:${p.id}` ? (
-                                  <Check size={11} className="text-emerald-600" />
-                                ) : (
-                                  <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
+                        <TD onClick={(e) => e.stopPropagation()}>
+                          {p.billId ? (
+                            <button
+                              type="button"
+                              title="Copy bill code"
+                              onClick={() => copyText(`bill:${p.id}`, p.billId!, "bill code")}
+                              className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                            >
+                              <span>{p.billId}</span>
+                              {copiedKey === `bill:${p.id}` ? (
+                                <Check size={12} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
                         </TD>
                         <TD>
-                          <div className="min-w-0">
-                            <p className="truncate font-semibold text-slate-900">
-                              {p.billAssignedToName}
-                            </p>
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold",
-                                  p.billAssignedTo === "VENDOR"
-                                    ? "border-indigo-100 bg-indigo-50/80 text-indigo-700"
-                                    : "border-slate-200 bg-slate-50 text-slate-600",
-                                )}
-                              >
-                                {p.billAssignedTo === "VENDOR" ? "Vendor" : "Platform"}
-                              </span>
-                              {p.billAssignedTo === "VENDOR" && (
-                                <button
-                                  type="button"
-                                  title="Copy vendor ID"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    copyText(
-                                      `vendor:${p.id}`,
-                                      p.billAssignedToId,
-                                      "vendor ID",
-                                    );
-                                  }}
-                                  className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                                >
-                                  <span>{p.billAssignedToId}</span>
-                                  {copiedKey === `vendor:${p.id}` ? (
-                                    <Check size={11} className="text-emerald-600" />
-                                  ) : (
-                                    <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
-                                  )}
-                                </button>
+                          <p className="font-semibold text-slate-900">{p.operatorName || "—"}</p>
+                        </TD>
+                        <TD onClick={(e) => e.stopPropagation()}>
+                          {p.consumerId ? (
+                            <button
+                              type="button"
+                              title="Copy consumer ID"
+                              onClick={() =>
+                                copyText(`consumer:${p.id}`, p.consumerId!, "consumer ID")
+                              }
+                              className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 -ml-1.5 font-mono text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                            >
+                              <span>{p.consumerId}</span>
+                              {copiedKey === `consumer:${p.id}` ? (
+                                <Check size={12} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
                               )}
-                            </div>
-                          </div>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
                         </TD>
                         <TD className="font-mono font-semibold text-slate-900">
                           {inr(p.billAmount)}
@@ -1034,32 +1059,6 @@ export default function OrganisationBillPaymentsPage() {
                             <p className="mt-1 text-[11px] font-medium text-indigo-700">
                               {stageLabel(p.vendorStage)}
                             </p>
-                          )}
-                        </TD>
-                        <TD onClick={(e) => e.stopPropagation()}>
-                          {primaryRef ? (
-                            <div>
-                              <button
-                                type="button"
-                                title="Copy reference"
-                                onClick={() => copyText(`ref:${p.id}`, primaryRef, "reference")}
-                                className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 -ml-1.5 font-mono text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
-                              >
-                                <span>{primaryRef}</span>
-                                {copiedKey === `ref:${p.id}` ? (
-                                  <Check size={12} className="text-emerald-600" />
-                                ) : (
-                                  <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
-                                )}
-                              </button>
-                              {p.transactionReferenceNumber && p.bbpsExternalReference && (
-                                <p className="mt-0.5 font-mono text-[11px] text-slate-400">
-                                  BBPS: {p.bbpsExternalReference}
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-300">—</span>
                           )}
                         </TD>
                         <TD className="text-xs text-slate-500">
@@ -1277,10 +1276,12 @@ export default function OrganisationBillPaymentsPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-slate-900">
-                            {payment?.corpName ?? "Payment"}
+                            {payment?.operatorName || payment?.corpName || "Payment"}
                           </p>
                           <p className="mt-0.5 text-xs text-slate-500">
-                            <span className="font-mono">{payment?.transactionReferenceNumber ?? id}</span>
+                            <span className="font-mono">
+                              {payment?.consumerId || payment?.transactionReferenceNumber || id}
+                            </span>
                             {payment?.billAssignedTo === "VENDOR"
                               ? ` · ${payment.billAssignedToName}`
                               : ""}
@@ -1356,7 +1357,7 @@ export default function OrganisationBillPaymentsPage() {
         title="Record settlement"
         description={
           settleTarget
-            ? `${settleTarget.corpName} · ${inr(settleTarget.billAmount)}`
+            ? `${settleTarget.operatorName || settleTarget.corpName} · ${inr(settleTarget.billAmount)}${settleTarget.consumerId ? ` · ${settleTarget.consumerId}` : ""}`
             : undefined
         }
         footer={
@@ -1436,7 +1437,7 @@ export default function OrganisationBillPaymentsPage() {
         open={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}
         title="Filter bill payments"
-        description="Narrow the list by corporate, assignee, or amount."
+        description="Narrow the list by corporate, operator, consumer ID, assignee, or amount."
         footer={
           <>
             <Button variant="outline" onClick={resetFilters}>
@@ -1462,6 +1463,30 @@ export default function OrganisationBillPaymentsPage() {
               </option>
             ))}
           </SelectField>
+          <SelectField
+            label="Operator"
+            value={selectedOperator}
+            onChange={(e) => {
+              setSelectedOperator(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
+            <option value="ALL">All</option>
+            {operatorOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </SelectField>
+          <Field
+            label="Consumer ID"
+            value={consumerNumber}
+            onChange={(e) => {
+              setConsumerNumber(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="e.g. 100234567"
+          />
           <SelectField
             label="Assigned to"
             value={assignedToFilter}
@@ -1556,11 +1581,7 @@ function RowAction({
     );
   }
   if (payment.billAssignedTo === "VENDOR") {
-    return (
-      <span className="text-xs font-medium text-slate-500">
-        {stageLabel(payment.vendorStage) ?? "With vendor"}
-      </span>
-    );
+    return null;
   }
   if (payment.orgStatus === "PENDING" && canPickUp) {
     return (
@@ -1576,10 +1597,7 @@ function RowAction({
       </Button>
     );
   }
-  if (payment.orgStatus === "IN_PROCESS" && payment.awaitingChecker) {
-    return <span className="text-xs font-medium text-amber-700">Waiting for a checker</span>;
-  }
-  return <span className="text-xs text-slate-300">—</span>;
+  return null;
 }
 
 function PaymentDetail({
@@ -1596,6 +1614,49 @@ function PaymentDetail({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">
       <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
+        <DetailField label="Corporate" value={payment.corpName} />
+        <DetailField
+          label="Corporate ID"
+          value={payment.corpId}
+          mono
+          copied={copiedKey === `corp:${payment.id}`}
+          onCopy={() => onCopy(`corp:${payment.id}`, payment.corpId, "corporate ID")}
+        />
+        <DetailField
+          label={payment.billAssignedTo === "VENDOR" ? "Vendor" : "Assigned To"}
+          value={`${payment.billAssignedToName} (${payment.billAssignedTo === "VENDOR" ? "Vendor" : "Platform"})`}
+        />
+        <DetailField
+          label={payment.billAssignedTo === "VENDOR" ? "Vendor ID" : "Assignee ID"}
+          value={payment.billAssignedToId}
+          mono
+          copied={copiedKey === `vendor:${payment.id}`}
+          onCopy={() => onCopy(`vendor:${payment.id}`, payment.billAssignedToId, "assignee ID")}
+        />
+        <DetailField label="Bill Fetched On" value={formatDateTime(payment.billFetchedOn)} />
+        <DetailField
+          label="Bill Code"
+          value={payment.billId ?? "—"}
+          mono
+          copied={copiedKey === `bid:${payment.id}`}
+          onCopy={
+            payment.billId
+              ? () => onCopy(`bid:${payment.id}`, payment.billId!, "bill code")
+              : undefined
+          }
+        />
+        <DetailField label="Operator" value={payment.operatorName ?? "—"} />
+        <DetailField
+          label="Consumer ID"
+          value={payment.consumerId ?? "—"}
+          mono
+          copied={copiedKey === `cid:${payment.id}`}
+          onCopy={
+            payment.consumerId
+              ? () => onCopy(`cid:${payment.id}`, payment.consumerId!, "consumer ID")
+              : undefined
+          }
+        />
         <DetailField
           label="Payment ID"
           value={payment.id}
@@ -1612,10 +1673,6 @@ function PaymentDetail({
         />
         <DetailField label="Corp Paid User ID" value={payment.corpPaidUserId ?? "—"} mono />
         <DetailField label="Corp Payment Status" value={payment.corpPaymentStatus} />
-        <DetailField
-          label="Assigned To"
-          value={`${payment.billAssignedToName} (${payment.billAssignedTo})`}
-        />
         <DetailField label="Assigned Status" value={payment.billAssignedToStatus} />
         <DetailField label="Assigned On" value={formatDateTime(payment.billAssignedOn)} />
         <DetailField label="Bill Paid On" value={formatDateTime(payment.billPaidOn)} />

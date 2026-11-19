@@ -6,6 +6,7 @@ import {
   Check,
   Copy,
   GitBranch,
+  KeyRound,
   Mail,
   Phone,
   RotateCcw,
@@ -48,11 +49,13 @@ export function UsersTab({
   const path = usersPath ?? `/api/v1/paytrix/clients/${clientId}/users`;
   const isVendor = clientId.startsWith("VD");
   const toast = useToast();
+  const defaultAdminRole = isVendor ? "VENDOR_ADMIN" : "CORP_ADMIN";
   const currentRole = getUser()?.role;
   const canManage =
     currentRole === "SUPER_ADMIN" ||
     currentRole === "ORGANISATION_ADMIN" ||
-    currentRole === "CLIENT_ADMIN";
+    currentRole === "CORP_ADMIN" ||
+    currentRole === "VENDOR_ADMIN";
   const [users, setUsers] = useState<ClientUser[]>([]);
   const [branches, setBranches] = useState<{ id: string; name: string; code?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +64,7 @@ export function UsersTab({
     phoneNumber: "",
     email: "",
     fullName: "",
-    role: "CLIENT_ADMIN",
+    role: defaultAdminRole,
     branchId: "",
     password: "",
   });
@@ -78,6 +81,10 @@ export function UsersTab({
   const [assignBranchUser, setAssignBranchUser] = useState<ClientUser | null>(null);
   const [selectedBranchIds, setSelectedBranchIds] = useState<string[]>([]);
   const [savingBranches, setSavingBranches] = useState(false);
+
+  const [passwordTarget, setPasswordTarget] = useState<ClientUser | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
     if (!openMenuUserId) return;
@@ -103,28 +110,25 @@ export function UsersTab({
   }, [openMenuUserId]);
 
   function roleLabel(role: string) {
-    if (role === "CLIENT_ADMIN") {
-      return isVendor ? "Vendor Admin" : "Corporate Admin";
-    }
-    if (isVendor) {
-      return "Vendor Operator";
-    }
-    return "Branch User";
+    if (role === "VENDOR_ADMIN") return "Vendor Admin";
+    if (role === "VENDOR_OPERATOR") return "Vendor Operator";
+    if (role === "CORP_ADMIN") return "Corporate Admin";
+    if (role === "CORP_OPERATOR") return "Branch User";
+    return isVendor ? "Vendor Operator" : "Branch User";
   }
 
   async function load() {
     setLoading(true);
     try {
+      const branchesEndpoint = path.startsWith("/api/v1/paytrix/")
+        ? `/api/v1/paytrix/clients/${clientId}/branches`
+        : `/api/v1/clients/${clientId}/branches`;
       const [userRows, branchRows] = await Promise.all([
         apiFetch<ClientUser[]>(path),
         !isVendor && clientId
           ? apiFetch<{ id: string; name: string; code?: string | null }[]>(
-              `/api/v1/paytrix/clients/${clientId}/branches`,
-            ).catch(() =>
-              apiFetch<{ id: string; name: string; code?: string | null }[]>(
-                `/api/v1/clients/${clientId}/branches`,
-              ).catch(() => [] as { id: string; name: string; code?: string | null }[]),
-            )
+              branchesEndpoint,
+            ).catch(() => [] as { id: string; name: string; code?: string | null }[])
           : Promise.resolve([] as { id: string; name: string; code?: string | null }[]),
       ]);
       setUsers(userRows);
@@ -158,7 +162,7 @@ export function UsersTab({
           ...(!isVendor && form.role === "BRANCH_USER" && form.branchId
             ? { branchId: form.branchId }
             : {}),
-          ...(form.password.trim() ? { password: form.password } : {}),
+          password: form.password,
         },
       });
       toast.success(`${form.fullName.trim()} added as ${roleLabel(form.role)}`);
@@ -166,7 +170,7 @@ export function UsersTab({
         phoneNumber: "",
         email: "",
         fullName: "",
-        role: "CLIENT_ADMIN",
+        role: defaultAdminRole,
         branchId: "",
         password: "",
       });
@@ -259,21 +263,21 @@ export function UsersTab({
   const roleCards = isVendor
     ? [
         {
-          value: "CLIENT_ADMIN",
+          value: "VENDOR_ADMIN",
           title: "Vendor Admin",
           subtitle: "Manages assigned bills, settlements, and users",
           icon: ShieldCheck,
         },
         {
-          value: "CLIENT_OPERATOR",
+          value: "VENDOR_OPERATOR",
           title: "Vendor Operator",
-          subtitle: "Works on assigned bills and marks them paid",
+          subtitle: "Views assigned bills and settlement progress",
           icon: UserCheck,
         },
       ]
     : [
         {
-          value: "CLIENT_ADMIN",
+          value: "CORP_ADMIN",
           title: "Corporate Admin",
           subtitle: "Full access to bills, branches, wallet, and users",
           icon: ShieldCheck,
@@ -470,7 +474,7 @@ export function UsersTab({
                   </TD>
                   {!isVendor && (
                     <TD className="text-xs text-slate-700">
-                      {user.role === "CLIENT_ADMIN" ? (
+                      {user.role === "CORP_ADMIN" ? (
                         <span className="text-slate-400">All branches</span>
                       ) : (user.branches ?? []).length > 0 ? (
                         <div className="flex flex-wrap gap-1">
@@ -527,7 +531,7 @@ export function UsersTab({
                             style={{ top: menuPos.top, right: menuPos.right }}
                             className="fixed z-50 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
                           >
-                            {!isVendor && user.role !== "CLIENT_ADMIN" && (
+                            {!isVendor && user.role !== "CORP_ADMIN" && (
                               <button
                                 type="button"
                                 role="menuitem"
@@ -538,6 +542,19 @@ export function UsersTab({
                                 Assign branch
                               </button>
                             )}
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setOpenMenuUserId(null);
+                                setNewPassword("");
+                                setPasswordTarget(user);
+                              }}
+                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              <KeyRound size={14} className="text-slate-400" />
+                              Set password
+                            </button>
                             <button
                               type="button"
                               role="menuitem"
@@ -689,8 +706,8 @@ export function UsersTab({
           />
           <PasswordField
             label="Password"
+            required
             minLength={6}
-            hint="Optional. Leave blank if they will set their own password on first sign-in."
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
             placeholder="At least 6 characters"
@@ -780,6 +797,72 @@ export function UsersTab({
               })}
             </div>
           )}
+        </form>
+      </Modal>
+
+      <Modal
+        open={passwordTarget !== null}
+        onClose={() => !savingPassword && setPasswordTarget(null)}
+        title="Set password"
+        description={
+          passwordTarget
+            ? `Set a new sign-in password for ${passwordTarget.fullName}. Any active session for this user will be signed out immediately.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setPasswordTarget(null)}
+              disabled={savingPassword}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              form="reset-client-user-password-form"
+              loading={savingPassword}
+              disabled={newPassword.length < 6}
+            >
+              Save password
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="reset-client-user-password-form"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!passwordTarget) return;
+            setSavingPassword(true);
+            try {
+              const endpoint = path.startsWith("/api/v1/paytrix/")
+                ? `/api/v1/paytrix/users/${passwordTarget.id}/password`
+                : `${path}/${passwordTarget.id}/password`;
+              await apiFetch(endpoint, {
+                method: "PATCH",
+                body: { password: newPassword },
+              });
+              toast.success(`Password updated for ${passwordTarget.fullName}`);
+              setPasswordTarget(null);
+              setNewPassword("");
+            } catch (err) {
+              toast.error(err instanceof ApiError ? err.message : "Could not update password");
+            } finally {
+              setSavingPassword(false);
+            }
+          }}
+          className="flex flex-col gap-4"
+        >
+          <PasswordField
+            label="New password"
+            required
+            minLength={6}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="At least 6 characters"
+          />
         </form>
       </Modal>
     </div>

@@ -105,7 +105,10 @@ export default function OrganisationLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthGuard allowedRoles={["SUPER_ADMIN", "ORGANISATION_ADMIN", "MAKER", "CHECKER", "VIEWER", "SALES"]}>
+    <AuthGuard
+      portal="PLATFORM"
+      allowedRoles={["SUPER_ADMIN", "ORGANISATION_ADMIN", "MAKER", "CHECKER", "VIEWER", "SALES"]}
+    >
       {(user) => <OrganisationShell user={user}>{children}</OrganisationShell>}
     </AuthGuard>
   );

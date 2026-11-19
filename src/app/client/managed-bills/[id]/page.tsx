@@ -85,7 +85,7 @@ export default function ManagedBillDetailsPage() {
   const toast = useToast();
   const user = getUser();
   const clientId = user?.clientId ?? "";
-  const canManageAutoPay = user?.role === "CLIENT_ADMIN";
+  const canManageAutoPay = user?.role === "CORP_ADMIN";
 
   const [bill, setBill] = useState<ManagedBill | null>(null);
   const [loading, setLoading] = useState(true);

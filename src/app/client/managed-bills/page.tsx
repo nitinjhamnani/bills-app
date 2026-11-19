@@ -209,11 +209,11 @@ export default function ManagedBillsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
-        title="Managed bills"
+        title="Manage Bills"
         description={
           isBranchUser
-            ? "Bills on your branches, showing the latest cycle. Due bills move to My Payments."
-            : "Bills from every branch, showing the latest cycle. Due bills move to My Payments."
+            ? "Bills on your branches, showing the latest cycle. Due bills move to Bill Dues."
+            : "Bills from every branch, showing the latest cycle. Due bills move to Bill Dues."
         }
         actions={
           <>

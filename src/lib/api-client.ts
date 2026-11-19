@@ -1,4 +1,12 @@
-import { clearSession, getToken } from "./auth";
+import {
+  clearSession,
+  getMountedSessionId,
+  getSession,
+  peekBrowserSession,
+  saveSession,
+  type StoredSession,
+} from "./auth";
+import type { LoginResponse } from "./types";
 import { API_BASE_URL } from "./workspace";
 
 function withRequestId(message: string, requestId: string | null) {
@@ -19,7 +27,7 @@ export class ApiError extends Error {
 interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
-  auth?: boolean; // attach the bearer token; default true
+  auth?: boolean;
 }
 
 type InflightListener = (count: number) => void;
@@ -32,7 +40,6 @@ function setInflight(next: number) {
   inflightListeners.forEach((listener) => listener(inflight));
 }
 
-/** Subscribe to the number of API calls currently in flight. Returns an unsubscribe function. */
 export function subscribeInflight(listener: InflightListener) {
   inflightListeners.add(listener);
   listener(inflight);
@@ -54,32 +61,109 @@ function endRequest() {
 }
 
 let redirectingToLogin = false;
+let refreshPromise: Promise<StoredSession | null> | null = null;
 
-/** 401 means the token is missing or expired. A 403 is only "this action is not allowed" and must keep the session. */
-function logoutIfUnauthenticated(status: number) {
-  if (status !== 401 || typeof window === "undefined" || redirectingToLogin) return;
-  if (window.location.pathname === "/login") return;
+function redirectExpiredSession(sessionId?: string) {
+  if (typeof window === "undefined") return;
+  clearSession(sessionId);
+  if (window.location.pathname === "/login" || redirectingToLogin) return;
   redirectingToLogin = true;
-  clearSession();
-  window.location.replace("/login");
+  window.location.replace("/login?reason=session_expired");
 }
 
-/** Marks a raw upload/download as in flight so the global loader covers calls that cannot use {@link apiFetch}. */
+async function refreshSessionOnce(expectedSessionId: string): Promise<StoredSession | null> {
+  if (!API_BASE_URL) return null;
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const latest = peekBrowserSession();
+    if (!latest || latest.sessionId !== expectedSessionId) {
+      return null;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken: latest.refreshToken }),
+      });
+      if (!response.ok) {
+        return null;
+      }
+      const nextLogin = (await response.json()) as LoginResponse;
+      return saveSession(nextLogin);
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+async function resolveActiveSession(): Promise<StoredSession | null> {
+  const mountedId = getMountedSessionId();
+  const current = mountedId ? getSession() : peekBrowserSession();
+  if (!current) {
+    return null;
+  }
+  if (Date.now() >= current.accessExpiresAt - 30_000) {
+    return await refreshSessionOnce(current.sessionId);
+  }
+  return current;
+}
+
+export async function logoutSession(): Promise<void> {
+  const current = peekBrowserSession();
+  if (current && API_BASE_URL) {
+    try {
+      await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${current.accessToken}` },
+      });
+    } catch {
+      // Best-effort server revocation
+    }
+  }
+  redirectingToLogin = false;
+  clearSession();
+}
+
 export async function trackedFetch(
   input: string,
   init?: RequestInit,
 ): Promise<Response> {
   beginRequest();
   try {
-    const response = await fetch(input, init);
-    if (response.status === 401 && getToken()) logoutIfUnauthenticated(response.status);
+    let activeSession: StoredSession | null = null;
+    const nextInit: RequestInit = { ...init };
+    if (API_BASE_URL && input.startsWith(API_BASE_URL)) {
+      activeSession = await resolveActiveSession();
+      if (activeSession) {
+        const headers = new Headers(init?.headers);
+        headers.set("Authorization", `Bearer ${activeSession.accessToken}`);
+        nextInit.headers = headers;
+      }
+    }
+
+    let response = await fetch(input, nextInit);
+    if (response.status === 401 && activeSession) {
+      const refreshed = await refreshSessionOnce(activeSession.sessionId);
+      if (refreshed && !(init?.body instanceof FormData)) {
+        const retryHeaders = new Headers(init?.headers);
+        retryHeaders.set("Authorization", `Bearer ${refreshed.accessToken}`);
+        response = await fetch(input, { ...init, headers: retryHeaders });
+      }
+      if (response.status === 401) {
+        redirectExpiredSession(activeSession.sessionId);
+      }
+    }
     return response;
   } finally {
     endRequest();
   }
 }
 
-/** Thin fetch wrapper shared by every module - swap the base URL via env, nothing else changes. */
 export async function apiFetch<T>(
   path: string,
   options: RequestOptions = {},
@@ -90,21 +174,42 @@ export async function apiFetch<T>(
     throw new ApiError("Workspace is not available on this site.", 503);
   }
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  let activeSession: StoredSession | null = null;
   if (auth) {
-    const token = getToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
+    activeSession = await resolveActiveSession();
+    if (!activeSession) {
+      redirectExpiredSession();
+      throw new ApiError("Sign in to continue", 401, "UNAUTHENTICATED");
+    }
+  } else {
+    redirectingToLogin = false;
   }
 
-  beginRequest();
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+  const execute = async (token?: string) => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    return fetch(`${API_BASE_URL}${path}`, {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+  };
+
+  beginRequest();
+  try {
+    let response = await execute(activeSession?.accessToken);
+
+    if (response.status === 401 && auth && activeSession) {
+      const refreshed = await refreshSessionOnce(activeSession.sessionId);
+      if (refreshed) {
+        activeSession = refreshed;
+        response = await execute(refreshed.accessToken);
+      }
+    }
 
     if (!response.ok) {
       let message = `Request failed with status ${response.status}`;
@@ -114,10 +219,12 @@ export async function apiFetch<T>(
         message = errorBody.message ?? message;
         errorCode = errorBody.errorCode;
       } catch {
-        // response body wasn't JSON - fall back to the generic message above
+        // Fallback to status message
       }
       message = withRequestId(message, response.headers.get("X-Request-Id"));
-      if (auth) logoutIfUnauthenticated(response.status);
+      if (auth && response.status === 401) {
+        redirectExpiredSession(activeSession?.sessionId);
+      }
       throw new ApiError(message, response.status, errorCode);
     }
 
@@ -130,9 +237,6 @@ export async function apiFetch<T>(
   }
 }
 
-/** For raw `fetch()` calls that can't go through {@link apiFetch} (file upload/download, which
- * need FormData/blob handling) - extracts the backend's real error message from a failed
- * response instead of just reporting the HTTP status code. */
 export async function extractErrorMessage(
   response: Response,
   fallback: string,

@@ -1,11 +1,8 @@
-/** Organisation-side roles and what each one can actually do, mirrored from the tenant schema's role
- * seed data - this is the real permission boundary (enforced via @PreAuthorize on the backend),
- * not a separate fine-grained permission system. */
 export const ORGANISATION_ROLES = [
   {
     value: "ORGANISATION_ADMIN",
     label: "Paytrix Admin",
-    description: "Full control: settings, clients, users, RBAC and reports.",
+    description: "Full control: settings, corporates, vendors, users, RBAC and reports.",
   },
   {
     value: "MAKER",
@@ -29,9 +26,15 @@ export const ORGANISATION_ROLES = [
   },
 ] as const;
 
-export const CLIENT_ROLES = [
-  { value: "CLIENT_ADMIN", label: "Admin" },
-  { value: "CLIENT_OPERATOR", label: "Operator" },
+export const CORPORATE_ROLES = [
+  { value: "CORP_ADMIN", label: "Corporate Admin" },
+  { value: "CORP_OPERATOR", label: "Corporate Operator" },
+  { value: "BRANCH_USER", label: "Branch User" },
+] as const;
+
+export const VENDOR_ROLES = [
+  { value: "VENDOR_ADMIN", label: "Vendor Admin" },
+  { value: "VENDOR_OPERATOR", label: "Vendor Operator" },
 ] as const;
 
 export function roleDescription(role: string): string | undefined {

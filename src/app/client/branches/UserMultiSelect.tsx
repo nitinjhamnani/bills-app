@@ -12,8 +12,8 @@ export interface PoolUser {
 }
 
 export function roleLabel(role: string | undefined) {
-  if (role === "CLIENT_ADMIN") return "Admin";
-  if (role === "CLIENT_OPERATOR") return "Operator";
+  if (role === "CORP_ADMIN") return "Corporate Admin";
+  if (role === "CORP_OPERATOR") return "Branch user";
   if (role === "BRANCH_USER") return "Branch user";
   return role ?? "";
 }

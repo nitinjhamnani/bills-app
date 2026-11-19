@@ -1,3 +1,5 @@
+export type Portal = "PLATFORM" | "CORPORATE" | "VENDOR";
+
 export type Role =
   | "SUPER_ADMIN"
   | "ORGANISATION_ADMIN"
@@ -5,9 +7,11 @@ export type Role =
   | "CHECKER"
   | "VIEWER"
   | "SALES"
-  | "CLIENT_ADMIN"
-  | "CLIENT_OPERATOR"
-  | "BRANCH_USER";
+  | "CORP_ADMIN"
+  | "CORP_OPERATOR"
+  | "BRANCH_USER"
+  | "VENDOR_ADMIN"
+  | "VENDOR_OPERATOR";
 
 export function isOrgAdmin(role: Role | string | null | undefined): boolean {
   return role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN";
@@ -18,6 +22,8 @@ export interface UserProfile {
   phoneNumber: string;
   userCode: string | null;
   displayName: string;
+  portal: Portal;
+  userType?: string;
   role: Role;
   tenantSchema: string | null;
   clientId: string | null;
@@ -26,9 +32,16 @@ export interface UserProfile {
 }
 
 export interface LoginResponse {
+  sessionId: string;
   accessToken: string;
+  refreshToken: string;
   tokenType: string;
   expiresInSeconds: number;
+  user: UserProfile;
+}
+
+export interface SessionResponse {
+  sessionId: string;
   user: UserProfile;
 }
 
@@ -335,6 +348,10 @@ export interface ClientAccount {
   registrationNumber: string | null;
   registeredAddress: string | null;
   signingAuthority: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  state?: string | null;
+  location?: string | null;
   detailsSubmitted: boolean;
   kycStatus: "NOT_STARTED" | "PENDING" | "COMPLETE";
   contractStatus: "NOT_STARTED" | "PENDING" | "SIGNED";
@@ -626,31 +643,11 @@ export interface SpendByServiceRow {
   amount: number;
 }
 
-export function isVendorUser(
-  user: Pick<UserProfile, "clientId" | "clientType"> | null | undefined,
-): boolean {
-  if (!user) return false;
-  if (user.clientType === "VENDOR") return true;
-  if (user.clientType === "CORPORATE") return false;
-  return Boolean(user.clientId && user.clientId.startsWith("VD"));
-}
-
-/** Which top-level module a role lands in after login. */
-export function moduleForRole(role: Role): "paytrix" | "client" {
-  if (role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR" || role === "BRANCH_USER") return "client";
-  return "paytrix";
-}
-
-/** First page after login. Sales opens their own dashboard; vendors open /vendor/dashboard. */
-export function homeForRole(role: Role): string {
-  if (role === "SALES") return "/paytrix/sales";
-  return `/${moduleForRole(role)}/dashboard`;
-}
-
 export function homeForUser(
-  user: Pick<UserProfile, "role" | "clientId" | "clientType">,
+  user: Pick<UserProfile, "portal" | "role">,
 ): string {
+  if (user.portal === "VENDOR") return "/vendor/dashboard";
+  if (user.portal === "CORPORATE") return "/client/dashboard";
   if (user.role === "SALES") return "/paytrix/sales";
-  if (isVendorUser(user)) return "/vendor/dashboard";
-  return homeForRole(user.role);
+  return "/paytrix/dashboard";
 }

@@ -126,7 +126,7 @@ function CorporateDashboard() {
   }, []);
 
   const pending = analytics?.pendingBills ?? 0;
-  const canAct = user?.role === "CLIENT_ADMIN";
+  const canAct = user?.role === "CORP_ADMIN";
   const [stepBusy, setStepBusy] = useState<"company" | "kyc" | "contract" | null>(null);
 
   async function submitCompany(details: CompanyDetails) {
@@ -210,7 +210,7 @@ function CorporateDashboard() {
                 </p>
               )}
               <p className="mt-2 text-xs text-slate-500">
-                {user?.role === "CLIENT_ADMIN"
+                {user?.role === "CORP_ADMIN"
                   ? "A top-up is credited after Paytrix accepts it."
                   : "A Client Admin requests a top-up when more funds are needed."}
               </p>
@@ -219,7 +219,7 @@ function CorporateDashboard() {
               <Wallet size={16} />
             </span>
           </div>
-          {user?.role === "CLIENT_ADMIN" && (
+          {user?.role === "CORP_ADMIN" && (
             <Button icon={<Plus size={16} />} onClick={() => router.push("/client/wallet")}>
               Top up wallet
             </Button>
@@ -255,8 +255,8 @@ function CorporateDashboard() {
               <Clock size={16} />
             </span>
           </div>
-          <Button icon={<Send size={16} />} onClick={() => router.push("/client/my-dues")}>
-            {pending > 0 ? "Pay bills" : "My Payments"}
+          <Button icon={<Send size={16} />} onClick={() => router.push(pending > 0 ? "/client/my-dues" : "/client/my-payments")}>
+            {pending > 0 ? "Pay bills" : "Bill Payments"}
           </Button>
         </section>
       </div>
@@ -300,7 +300,7 @@ function CorporateDashboard() {
             <FileText size={16} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-900">Managed bills</span>
+            <span className="block text-sm font-semibold text-slate-900">Manage Bills</span>
             <span className="mt-0.5 block text-xs text-slate-500">
               Add a bill and follow each cycle.
             </span>

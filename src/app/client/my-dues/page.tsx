@@ -51,8 +51,8 @@ export default function ClientMyDuesPage() {
   const user = getUser();
   const clientId = user?.clientId ?? "";
   const role = user?.role;
-  const canPay = role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR";
-  const showBranch = role === "CLIENT_ADMIN" || role === "CLIENT_OPERATOR";
+  const canPay = role === "CORP_ADMIN" || role === "CORP_OPERATOR";
+  const showBranch = role === "CORP_ADMIN" || role === "CORP_OPERATOR";
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
@@ -232,7 +232,7 @@ export default function ClientMyDuesPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
-        title="My Dues"
+        title="Bill Dues"
         description={
           canPay
             ? "Bills that are due. Pay one, or select several and pay them together."

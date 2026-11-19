@@ -8,11 +8,11 @@ export default function VendorReportsLayout({ children }: { children: React.Reac
   const router = useRouter();
 
   useEffect(() => {
-    if (getUser()?.role !== "CLIENT_ADMIN") {
+    if (getUser()?.role !== "VENDOR_ADMIN") {
       router.replace("/vendor/dashboard");
     }
   }, [router]);
 
-  if (getUser()?.role !== "CLIENT_ADMIN") return null;
+  if (getUser()?.role !== "VENDOR_ADMIN") return null;
   return <>{children}</>;
 }

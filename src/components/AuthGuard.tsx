@@ -2,19 +2,34 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearSession, getToken, getUser } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-client";
+import {
+  bindMountedSession,
+  clearSession,
+  peekBrowserSession,
+  subscribeSessionChanges,
+  updateSessionUser,
+} from "@/lib/auth";
 import { isWorkspaceEnabled } from "@/lib/workspace";
-import type { Role, UserProfile } from "@/lib/types";
+import {
+  homeForUser,
+  type Portal,
+  type Role,
+  type SessionResponse,
+  type UserProfile,
+} from "@/lib/types";
 
 /**
- * Client-side route guard for the three role-based sections. Real authorization always happens
- * server-side (`@PreAuthorize` on the API) - this just keeps the UI from flashing a screen the
- * signed-in user's role can't use, and bounces unauthenticated visitors to /login.
+ * Portal and role route guard for Platform (/paytrix), Corporate (/client), and Vendor (/vendor).
+ * Keeps one active browser session across tabs, confirms live session validity with the backend,
+ * and redirects any cross-portal URL navigation back to the signed-in user's own workspace.
  */
 export function AuthGuard({
+  portal,
   allowedRoles,
   children,
 }: {
+  portal: Portal;
   allowedRoles: Role[];
   children: (user: UserProfile) => React.ReactNode;
 }) {
@@ -22,24 +37,73 @@ export function AuthGuard({
   const [user, setUser] = useState<UserProfile | null | undefined>(undefined);
 
   useEffect(() => {
-    const current = getUser();
-    const token = getToken();
-    if (!isWorkspaceEnabled || !current || !token) {
-      if (!token && current) clearSession();
-      router.replace("/login");
-      return;
+    let cancelled = false;
+
+    async function verify() {
+      if (!isWorkspaceEnabled) {
+        router.replace("/login");
+        return;
+      }
+      const initial = peekBrowserSession();
+      if (!initial) {
+        bindMountedSession(null);
+        router.replace("/login");
+        return;
+      }
+
+      bindMountedSession(initial.sessionId);
+
+      try {
+        const confirmed = await apiFetch<SessionResponse>("/api/v1/auth/session");
+        if (cancelled) return;
+
+        if (confirmed.sessionId !== initial.sessionId) {
+          bindMountedSession(null);
+          router.replace("/login?reason=session_replaced");
+          return;
+        }
+
+        updateSessionUser(confirmed.sessionId, confirmed.user);
+
+        if (confirmed.user.portal !== portal || !allowedRoles.includes(confirmed.user.role)) {
+          router.replace(homeForUser(confirmed.user));
+          return;
+        }
+
+        setUser(confirmed.user);
+      } catch {
+        if (cancelled) return;
+        clearSession(initial.sessionId);
+        router.replace("/login?reason=session_expired");
+      }
     }
-    if (!allowedRoles.includes(current.role)) {
-      router.replace("/login");
-      return;
-    }
-    // Deliberate one-time, client-only mount effect: `getUser()` reads localStorage, which isn't
-    // available during SSR, so this can't be a lazy useState initializer without risking a
-    // hydration mismatch against the server-rendered"Loading..."markup below.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setUser(current);
+
+    void verify();
+
+    const unsubscribe = subscribeSessionChanges((next) => {
+      if (cancelled) return;
+      if (!next) {
+        bindMountedSession(null);
+        setUser(null);
+        router.replace("/login");
+        return;
+      }
+      if (next.user.portal !== portal || !allowedRoles.includes(next.user.role)) {
+        bindMountedSession(next.sessionId);
+        setUser(null);
+        router.replace(homeForUser(next.user));
+        return;
+      }
+      bindMountedSession(next.sessionId);
+      setUser(next.user);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [portal, router]);
 
   if (user === undefined) {
     return (

@@ -117,7 +117,7 @@ export function BranchesTab({ clientId }: { clientId: string }) {
         ),
       ]);
       setBranches(rows);
-      setBranchUsersPool(allUsers.filter((u) => u.role !== "CLIENT_ADMIN"));
+      setBranchUsersPool(allUsers.filter((u) => u.role !== "CORP_ADMIN"));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load branches");
     } finally {

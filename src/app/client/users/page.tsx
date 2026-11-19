@@ -12,12 +12,12 @@ export default function ClientUsersPage() {
   const clientId = user?.clientId ?? "";
 
   useEffect(() => {
-    if (user?.role !== "CLIENT_ADMIN") {
+    if (user?.role !== "CORP_ADMIN") {
       router.replace("/client/dashboard");
     }
   }, [router, user?.role]);
 
-  if (!clientId || user?.role !== "CLIENT_ADMIN") return null;
+  if (!clientId || user?.role !== "CORP_ADMIN") return null;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">

@@ -34,7 +34,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { onboardingStatus } from "@/lib/onboarding-status";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Field, SelectField } from "@/components/ui/Field";
+import { Field, PasswordField, SelectField } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 import { getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -112,8 +112,12 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>(initialTab);
   const [terminateOpen, setTerminateOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -131,6 +135,7 @@ export default function ClientDetailPage() {
   useEffect(() => {
     const currentRole = getUser()?.role;
     setIsAdmin(currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN");
+    setIsSuperAdmin(currentRole === "SUPER_ADMIN");
   }, []);
 
   useEffect(() => {
@@ -237,6 +242,26 @@ export default function ClientDetailPage() {
     }
   }
 
+  async function handleDeleteCorporate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!client || !deletePassword.trim()) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/api/v1/paytrix/clients/${clientId}/delete`, {
+        method: "POST",
+        body: { password: deletePassword },
+      });
+      toast.success(`${client.clientName} and all related data deleted`);
+      setDeleteOpen(false);
+      setDeletePassword("");
+      router.replace("/paytrix/corporates");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to delete corporate");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function advanceOnboarding(step: "kyc-complete" | "contract-signed" | "activate") {
     setBusy(true);
     try {
@@ -303,7 +328,7 @@ export default function ClientDetailPage() {
             <ArrowLeft size={14} /> {client?.clientType === "VENDOR" ? "Vendors" : "Corporates"}
           </Link>
 
-          {isAdmin && client && client.status !== "TERMINATED" && (
+          {isAdmin && client && (client.status !== "TERMINATED" || (isSuperAdmin && !vendor)) && (
             <div ref={menuRef} className="relative">
               <button
                 type="button"
@@ -321,51 +346,70 @@ export default function ClientDetailPage() {
                   role="menu"
                   className="absolute right-0 z-30 mt-2 w-52 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={openEditModal}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Pencil size={14} className="text-slate-400" />
-                    {vendor ? "Edit vendor details" : "Edit corporate details"}
-                  </button>
-                  {client.status !== "PENDING" && (
+                  {client.status !== "TERMINATED" && (
+                    <>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={openEditModal}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        <Pencil size={14} className="text-slate-400" />
+                        {vendor ? "Edit vendor details" : "Edit corporate details"}
+                      </button>
+                      {client.status !== "PENDING" && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={busy}
+                          onClick={() =>
+                            setStatus(client.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")
+                          }
+                          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          {client.status === "ACTIVE" ? (
+                            <>
+                              <Ban size={14} className="text-amber-500" />
+                              Deactivate
+                            </>
+                          ) : (
+                            <>
+                              <RotateCcw size={14} className="text-emerald-600" />
+                              Reactivate
+                            </>
+                          )}
+                        </button>
+                      )}
+                      <div className="my-1 h-px bg-slate-100" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          setTerminateOpen(true);
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                      >
+                        <Ban size={14} />
+                        Terminate
+                      </button>
+                    </>
+                  )}
+                  {!vendor && isSuperAdmin && (
                     <button
                       type="button"
                       role="menuitem"
-                      disabled={busy}
-                      onClick={() =>
-                        setStatus(client.status === "ACTIVE" ? "SUSPENDED" : "ACTIVE")
-                      }
-                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setDeletePassword("");
+                        setDeleteOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
                     >
-                      {client.status === "ACTIVE" ? (
-                        <>
-                          <Ban size={14} className="text-amber-500" />
-                          Deactivate
-                        </>
-                      ) : (
-                        <>
-                          <RotateCcw size={14} className="text-emerald-600" />
-                          Reactivate
-                        </>
-                      )}
+                      <Trash2 size={14} />
+                      Delete corporate
                     </button>
                   )}
-                  <div className="my-1 h-px bg-slate-100" />
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setTerminateOpen(true);
-                    }}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                  >
-                    <Trash2 size={14} />
-                    Terminate
-                  </button>
                 </div>
               )}
             </div>
@@ -675,6 +719,51 @@ export default function ClientDetailPage() {
         <p className="text-sm text-slate-600">
           {client?.clientName} will be marked terminated. This cannot be undone.
         </p>
+      </Modal>
+
+      <Modal
+        open={deleteOpen}
+        onClose={() => !deleting && setDeleteOpen(false)}
+        title="Delete corporate permanently?"
+        description="This permanently deletes this corporate, all of its users, branches, bills, payment history, wallet transactions, and support tickets. This action cannot be undone."
+        footer={
+          <>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              type="submit"
+              form="delete-corporate-confirm-form"
+              loading={deleting}
+              disabled={!deletePassword.trim()}
+            >
+              Delete corporate
+            </Button>
+          </>
+        }
+      >
+        <form id="delete-corporate-confirm-form" onSubmit={handleDeleteCorporate} className="flex flex-col gap-4">
+          <div className="rounded-xl border border-rose-200 bg-rose-50/70 px-3.5 py-3 text-xs leading-relaxed text-rose-900">
+            You are about to permanently delete{" "}
+            <span className="font-bold">{client?.clientName}</span>{" "}
+            (<span className="font-mono font-semibold">{client?.clientCode ?? client?.id}</span>) and all
+            associated users and data.
+          </div>
+          <PasswordField
+            label="Super Admin password"
+            required
+            autoFocus
+            value={deletePassword}
+            onChange={(event) => setDeletePassword(event.target.value)}
+            placeholder="Enter Super Admin password to confirm"
+          />
+        </form>
       </Modal>
     </div>
   );

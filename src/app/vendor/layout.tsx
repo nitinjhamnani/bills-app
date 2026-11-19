@@ -15,15 +15,15 @@ import { AppShell, type NavLink } from "@/components/AppShell";
 import { ClientSupportFab } from "@/components/support/ClientSupportFab";
 import { useSupportUnreadCount } from "@/lib/support-unread";
 import { apiFetch } from "@/lib/api-client";
-import { isVendorUser, type ClientAccount, type Role, type UserProfile } from "@/lib/types";
+import type { ClientAccount, Role, UserProfile } from "@/lib/types";
 
 const VENDOR_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/vendor/assigned-bills", label: "My Payments", icon: Send },
   { href: "/vendor/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/vendor/reports", label: "Reports", icon: BarChart3, roles: ["CLIENT_ADMIN"] },
+  { href: "/vendor/reports", label: "Reports", icon: BarChart3, roles: ["VENDOR_ADMIN"] },
   { href: "/vendor/support", label: "Support", icon: MessageCircle },
-  { href: "/vendor/users", label: "Users", icon: Users, roles: ["CLIENT_ADMIN"] },
+  { href: "/vendor/users", label: "Users", icon: Users, roles: ["VENDOR_ADMIN"] },
 ];
 
 function VendorShell({
@@ -39,22 +39,12 @@ function VendorShell({
   const pathname = usePathname();
   const router = useRouter();
   const [account, setAccount] = useState<ClientAccount | null>(null);
-  const notVendor = !isVendorUser(user) || (account != null && account.clientType !== "VENDOR");
 
   useEffect(() => {
-    if (!isVendorUser(user)) {
-      router.replace("/client/dashboard");
-      return;
-    }
     apiFetch<ClientAccount>("/api/v1/client/account")
-      .then((next) => {
-        setAccount(next);
-        if (next.clientType !== "VENDOR") {
-          router.replace("/client/dashboard");
-        }
-      })
+      .then((next) => setAccount(next))
       .catch(() => setAccount(null));
-  }, [router, user]);
+  }, [user.userId]);
 
   const pending = account?.status === "PENDING";
   useEffect(() => {
@@ -63,8 +53,6 @@ function VendorShell({
       router.replace("/vendor/dashboard");
     }
   }, [pending, pathname, router]);
-
-  if (notVendor) return null;
 
   const links =
     account == null || pending
@@ -95,7 +83,7 @@ export default function VendorLayout({
   children: React.ReactNode;
 }) {
   return (
-    <AuthGuard allowedRoles={["CLIENT_ADMIN", "CLIENT_OPERATOR"]}>
+    <AuthGuard portal="VENDOR" allowedRoles={["VENDOR_ADMIN", "VENDOR_OPERATOR"]}>
       {(user) => <VendorShell user={user}>{children}</VendorShell>}
     </AuthGuard>
   );
