@@ -36,7 +36,7 @@ const NAV: NavLink[] = [
   { href: "/paytrix/disputes", label: "Bill Disputes", icon: AlertTriangle, group: "Corporate" },
   { href: "/paytrix/vendor-rules", label: "Vendor Rules", icon: BadgePercent, group: "Vendors" },
   { href: "/paytrix/vendor-payments", label: "Vendor Payments", icon: Banknote, group: "Vendors" },
-  { href: "/paytrix/transactions", label: "Transactions", icon: ArrowLeftRight, group: "Platform & Settings" },
+  { href: "/paytrix/ledger", label: "Ledger", icon: ArrowLeftRight, group: "Platform & Settings" },
   { href: "/paytrix/support-tickets", label: "Support Tickets", icon: LifeBuoy, group: "Platform & Settings" },
   { href: "/paytrix/reports", label: "Reports", icon: BarChart3, group: "Platform & Settings" },
   { href: "/paytrix/settings", label: "Settings", icon: Settings, group: "Platform & Settings" },
@@ -59,7 +59,7 @@ function OrganisationShell({
     pathname === "/paytrix/profile";
   const adminOnlyBlocked =
     !isAdmin &&
-    ["/paytrix/users", "/paytrix/transactions"].some(
+    ["/paytrix/users", "/paytrix/ledger", "/paytrix/transactions"].some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
     );
   const unread = useSupportUnreadCount(
@@ -84,7 +84,7 @@ function OrganisationShell({
       ]
     : NAV.filter(
         (item) =>
-          (item.href !== "/paytrix/transactions" && item.href !== "/paytrix/users") || isAdmin,
+          (item.href !== "/paytrix/ledger" && item.href !== "/paytrix/users") || isAdmin,
       ).map((item) =>
         badgeByHref[item.href] !== undefined
           ? { ...item, badge: badgeByHref[item.href] }

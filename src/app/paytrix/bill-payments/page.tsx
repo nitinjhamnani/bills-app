@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -65,12 +66,13 @@ interface BillPaymentRow {
   canSettle: boolean;
 }
 
-type QueueTab = "ALL" | "ASSIGNED" | "NOT_ASSIGNED";
+type QueueTab = "ALL" | "ASSIGNED" | "NOT_ASSIGNED" | "PAID";
 
 const QUEUE: { key: QueueTab; label: string }[] = [
   { key: "ALL", label: "All" },
   { key: "ASSIGNED", label: "Assigned" },
   { key: "NOT_ASSIGNED", label: "Not Assigned" },
+  { key: "PAID", label: "Paid" },
 ];
 
 function formatDateTime(iso: string | null | undefined) {
@@ -106,10 +108,10 @@ function commissionLabel(percent: number) {
   return `${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 }).format(percent)}%`;
 }
 
-type BillCheck = {
-  summary: string;
-  paid: boolean;
+type VerifyOutcomeItem = {
+  billPaymentId: string;
   verified: boolean;
+  note: string;
 };
 
 export default function OrganisationBillPaymentsPage() {
@@ -148,10 +150,14 @@ export default function OrganisationBillPaymentsPage() {
   const [billType, setBillType] = useState("");
   const [failReason, setFailReason] = useState("");
 
-  const [verifyIds, setVerifyIds] = useState<string[] | null>(null);
-  const [manualIds, setManualIds] = useState<Set<string>>(new Set());
-  const [bbpsById, setBbpsById] = useState<Record<string, BillCheck>>({});
-  const [checkingBbps, setCheckingBbps] = useState(false);
+  const [bbpsVerifyModalOpen, setBbpsVerifyModalOpen] = useState(false);
+  const [bbpsModalTargets, setBbpsModalTargets] = useState<BillPaymentRow[]>([]);
+  const [bbpsOutcomes, setBbpsOutcomes] = useState<Record<string, VerifyOutcomeItem> | null>(null);
+  const [verifyingBbps, setVerifyingBbps] = useState(false);
+
+  const [manualVerifyModalOpen, setManualVerifyModalOpen] = useState(false);
+  const [manualReason, setManualReason] = useState("");
+  const [verifyingManual, setVerifyingManual] = useState(false);
 
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [assignMode, setAssignMode] = useState<"manual" | "rules">("manual");
@@ -161,16 +167,18 @@ export default function OrganisationBillPaymentsPage() {
   const [previewingAssign, setPreviewingAssign] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [assignLines, setAssignLines] = useState<AssignmentPlan[] | null>(null);
-  const [verifying, setVerifying] = useState(false);
-  const [checkingId, setCheckingId] = useState<string | null>(null);
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
     try {
       const next = await apiFetch<BillPaymentRow[]>("/api/v1/paytrix/my-payments");
       setPayments(next);
-      const unpicked = new Set(next.filter(isUnpickedRow).map((row) => row.id));
-      setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => unpicked.has(id))));
+      const selectable = new Set(
+        next
+          .filter((row) => isUnpickedRow(row) || isPaidUnverifiedRow(row))
+          .map((row) => row.id),
+      );
+      setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => selectable.has(id))));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load bill payments");
     } finally {
@@ -195,37 +203,37 @@ export default function OrganisationBillPaymentsPage() {
     }
   }
 
-  const unpaidPayments = useMemo(
-    () => payments.filter((p) => p.orgStatus !== "PAID"),
+  const activePayments = useMemo(
+    () => payments.filter((p) => !p.verified),
     [payments],
   );
 
   const corpOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of unpaidPayments) map.set(p.corpId, p.corpName);
+    for (const p of activePayments) map.set(p.corpId, p.corpName);
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [unpaidPayments]);
+  }, [activePayments]);
 
   const operatorOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const p of unpaidPayments) {
+    for (const p of activePayments) {
       if (p.operatorName) set.add(p.operatorName);
     }
     return Array.from(set).sort();
-  }, [unpaidPayments]);
+  }, [activePayments]);
 
   const vendorOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of unpaidPayments) {
+    for (const p of activePayments) {
       if (p.billAssignedTo === "VENDOR") {
         map.set(p.billAssignedToId, p.billAssignedToName);
       }
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [unpaidPayments]);
+  }, [activePayments]);
 
   const narrowed = useMemo(() => {
-    let result = unpaidPayments;
+    let result = activePayments;
     if (selectedCorpId !== "ALL") {
       result = result.filter((p) => p.corpId === selectedCorpId);
     }
@@ -259,7 +267,7 @@ export default function OrganisationBillPaymentsPage() {
     result = result.filter((p) => matchesAmount(p.billAmount, amountMin, amountMax));
     return result;
   }, [
-    unpaidPayments,
+    activePayments,
     selectedCorpId,
     selectedOperator,
     consumerNumber,
@@ -271,18 +279,30 @@ export default function OrganisationBillPaymentsPage() {
 
   const counts = useMemo<Record<QueueTab, number>>(
     () => ({
-      ALL: narrowed.length,
-      ASSIGNED: narrowed.filter((p) => p.billAssignedTo === "VENDOR").length,
-      NOT_ASSIGNED: narrowed.filter((p) => p.billAssignedTo !== "VENDOR").length,
+      ALL: narrowed.filter(isUnpaidQueueRow).length,
+      ASSIGNED: narrowed.filter((p) => isUnpaidQueueRow(p) && p.billAssignedTo === "VENDOR").length,
+      NOT_ASSIGNED: narrowed.filter((p) => isUnpaidQueueRow(p) && p.billAssignedTo !== "VENDOR")
+        .length,
+      PAID: narrowed.filter(isPaidUnverifiedRow).length,
     }),
     [narrowed],
   );
 
   const visible = useMemo(() => {
-    if (queue === "ASSIGNED") return narrowed.filter((p) => p.billAssignedTo === "VENDOR");
-    if (queue === "NOT_ASSIGNED") return narrowed.filter((p) => p.billAssignedTo !== "VENDOR");
-    return narrowed;
+    if (queue === "PAID") return narrowed.filter(isPaidUnverifiedRow);
+    if (queue === "ASSIGNED") {
+      return narrowed.filter((p) => isUnpaidQueueRow(p) && p.billAssignedTo === "VENDOR");
+    }
+    if (queue === "NOT_ASSIGNED") {
+      return narrowed.filter((p) => isUnpaidQueueRow(p) && p.billAssignedTo !== "VENDOR");
+    }
+    return narrowed.filter(isUnpaidQueueRow);
   }, [narrowed, queue]);
+
+  const visibleTotalAmount = useMemo(
+    () => visible.reduce((sum, p) => sum + (p.billAmount ?? 0), 0),
+    [visible],
+  );
 
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const paged = useMemo(
@@ -300,8 +320,11 @@ export default function OrganisationBillPaymentsPage() {
   ].filter(Boolean).length;
 
   const selectableVisible = useMemo(
-    () => visible.filter(isUnpickedRow),
-    [visible],
+    () =>
+      visible.filter((p) =>
+        queue === "PAID" ? isPaidUnverifiedRow(p) : isUnpickedRow(p),
+      ),
+    [visible, queue],
   );
 
   const allSelectableSelected =
@@ -312,6 +335,11 @@ export default function OrganisationBillPaymentsPage() {
     [payments, selectedIds],
   );
 
+  const selectedPaidRows = useMemo(
+    () => payments.filter((p) => selectedIds.has(p.id) && isPaidUnverifiedRow(p)),
+    [payments, selectedIds],
+  );
+
   const currentRole = getUser()?.role;
   const canMarkInProgress =
     currentRole === "SUPER_ADMIN" ||
@@ -319,6 +347,10 @@ export default function OrganisationBillPaymentsPage() {
     currentRole === "MAKER";
   const canAssignVendors =
     currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
+  const canVerify =
+    currentRole === "SUPER_ADMIN" ||
+    currentRole === "ORGANISATION_ADMIN" ||
+    currentRole === "CHECKER";
 
   function resetFilters() {
     setSelectedCorpId("ALL");
@@ -332,7 +364,9 @@ export default function OrganisationBillPaymentsPage() {
 
   function toggleSelect(id: string) {
     const row = payments.find((p) => p.id === id);
-    if (!row || !isUnpickedRow(row)) return;
+    if (!row) return;
+    const allowed = queue === "PAID" ? isPaidUnverifiedRow(row) : isUnpickedRow(row);
+    if (!allowed) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -541,173 +575,115 @@ export default function OrganisationBillPaymentsPage() {
     }
   }
 
-  function openVerify(ids: string[]) {
-    setBbpsById({});
-    setManualIds(new Set(ids));
-    setVerifyIds(ids);
+  function openBbpsVerifyModal() {
+    if (selectedPaidRows.length === 0) return;
+    setBbpsModalTargets(selectedPaidRows);
+    setBbpsOutcomes(null);
+    setBbpsVerifyModalOpen(true);
   }
 
-  function closeVerify() {
-    if (verifying || checkingBbps || checkingId) return;
-    setVerifyIds(null);
-    setManualIds(new Set());
-    setBbpsById({});
+  function closeBbpsVerifyModal() {
+    if (verifyingBbps) return;
+    setBbpsVerifyModalOpen(false);
+    setBbpsOutcomes(null);
+    setBbpsModalTargets([]);
   }
 
-  function toggleManual(id: string) {
-    setManualIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  async function checkSelectedWithBbps() {
-    if (!verifyIds || verifyIds.length === 0) return;
-    setCheckingBbps(true);
-    let verifiedCount = 0;
+  async function confirmBbpsVerify() {
+    const ids = bbpsModalTargets.map((r) => r.id);
+    if (ids.length === 0) return;
+    setVerifyingBbps(true);
     try {
-      for (const id of verifyIds) {
-        if (bbpsById[id]?.verified) continue;
-        try {
-          const result = await apiFetch<{ zeroPending: boolean; summary: string }>(
-            `/api/v1/paytrix/settlements/${id}/bbps-check`,
-            { method: "POST" },
-          );
-          if (result.zeroPending) {
-            const verified = await apiFetch<Array<{ verified: boolean; note: string }>>(
-              "/api/v1/paytrix/settlements/verify",
-              { method: "POST", body: { billPaymentIds: [id] } },
-            );
-            const ok = verified[0]?.verified === true;
-            setBbpsById((prev) => ({
-              ...prev,
-              [id]: {
-                paid: true,
-                verified: ok,
-                summary: ok
-                  ? "Verified. The provider shows this bill as paid."
-                  : verified[0]?.note || result.summary,
-              },
-            }));
-            if (ok) {
-              verifiedCount++;
-              setManualIds((prev) => {
-                const next = new Set(prev);
-                next.delete(id);
-                return next;
-              });
-            }
-          } else {
-            setBbpsById((prev) => ({
-              ...prev,
-              [id]: { paid: false, verified: false, summary: result.summary },
-            }));
-            setManualIds((prev) => {
-              const next = new Set(prev);
-              next.delete(id);
-              return next;
-            });
-          }
-        } catch (err) {
-          setBbpsById((prev) => ({
-            ...prev,
-            [id]: {
-              paid: false,
-              verified: false,
-              summary: err instanceof ApiError ? err.message : "The BBPS check failed",
-            },
-          }));
-          setManualIds((prev) => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
-        }
-      }
-      if (verifiedCount > 0) {
+      const results = await apiFetch<VerifyOutcomeItem[]>(
+        "/api/v1/paytrix/settlements/verify-bbps",
+        {
+          method: "POST",
+          body: { billPaymentIds: ids },
+        },
+      );
+      const ok = results.filter((r) => r.verified).length;
+      const verifiedSet = new Set(results.filter((r) => r.verified).map((r) => r.billPaymentId));
+
+      if (ok === results.length) {
         toast.success(
-          verifiedCount === 1
-            ? "1 bill verified from BBPS"
-            : `${verifiedCount} bills verified from BBPS`,
+          ok === 1 ? "Bill verified via BBPS" : `Verified ${ok} bills via BBPS`,
         );
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+        setBbpsVerifyModalOpen(false);
+        setBbpsOutcomes(null);
+        setBbpsModalTargets([]);
+        await load(true);
+      } else {
+        const byId: Record<string, VerifyOutcomeItem> = {};
+        for (const r of results) byId[r.billPaymentId] = r;
+        setBbpsOutcomes(byId);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of verifiedSet) next.delete(id);
+          return next;
+        });
+        if (ok > 0) {
+          toast.error(`Verified ${ok} of ${results.length} bills via BBPS. Review remaining bills.`);
+        } else {
+          toast.error(results[0]?.note ?? "BBPS could not confirm payment for the selected bills");
+        }
         await load(true);
       }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "BBPS verification failed");
     } finally {
-      setCheckingBbps(false);
+      setVerifyingBbps(false);
     }
   }
 
-  async function verifyBills(ids: string[]) {
-    setVerifying(true);
+  function openManualVerifyModal() {
+    if (selectedPaidRows.length === 0) return;
+    setManualReason("");
+    setManualVerifyModalOpen(true);
+  }
+
+  function closeManualVerifyModal() {
+    if (verifyingManual) return;
+    setManualVerifyModalOpen(false);
+    setManualReason("");
+  }
+
+  async function confirmManualVerify() {
+    const ids = selectedPaidRows.map((r) => r.id);
+    const trimmedReason = manualReason.trim();
+    if (ids.length === 0) return;
+    if (!trimmedReason) {
+      toast.error("Please enter a reason for manual verification");
+      return;
+    }
+    setVerifyingManual(true);
     try {
-      const results = await apiFetch<
-        Array<{ billPaymentId: string; verified: boolean; note: string }>
-      >("/api/v1/paytrix/settlements/verify", {
+      const results = await apiFetch<VerifyOutcomeItem[]>("/api/v1/paytrix/settlements/verify", {
         method: "POST",
-        body: { billPaymentIds: ids },
+        body: { billPaymentIds: ids, reason: trimmedReason },
       });
-      const ok = results.filter((result) => result.verified).length;
-      if (ok === results.length) toast.success(ok === 1 ? "Bill verified" : `Verified ${ok} bills`);
-      else
-        toast.error(
-          `Verified ${ok} of ${results.length}. ${results.find((result) => !result.verified)?.note ?? ""}`,
+      const ok = results.filter((r) => r.verified).length;
+      if (ok === results.length) {
+        toast.success(
+          ok === 1 ? "Bill manually verified" : `Manually verified ${ok} bills`,
         );
-      setVerifyIds(null);
-      setManualIds(new Set());
-      setBbpsById({});
+      } else {
+        toast.error(
+          `Verified ${ok} of ${results.length}. ${results.find((r) => !r.verified)?.note ?? ""}`,
+        );
+      }
+      setManualVerifyModalOpen(false);
+      setManualReason("");
       setSelectedIds(new Set());
       await load(true);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Verification failed");
+      toast.error(err instanceof ApiError ? err.message : "Manual verification failed");
     } finally {
-      setVerifying(false);
-    }
-  }
-
-  async function runBbpsCheck(id: string) {
-    setCheckingId(id);
-    try {
-      const result = await apiFetch<{ zeroPending: boolean; summary: string }>(
-        `/api/v1/paytrix/settlements/${id}/bbps-check`,
-        { method: "POST" },
-      );
-      if (result.zeroPending) {
-        const verified = await apiFetch<Array<{ verified: boolean; note: string }>>(
-          "/api/v1/paytrix/settlements/verify",
-          { method: "POST", body: { billPaymentIds: [id] } },
-        );
-        if (verified[0]?.verified) {
-          toast.success("Bill verified");
-          setVerifyIds(null);
-          setManualIds(new Set());
-          setBbpsById({});
-          setSelectedIds(new Set());
-          await load(true);
-          return;
-        }
-        setBbpsById((prev) => ({
-          ...prev,
-          [id]: { paid: true, verified: false, summary: verified[0]?.note || result.summary },
-        }));
-        return;
-      }
-      setBbpsById((prev) => ({
-        ...prev,
-        [id]: { paid: false, verified: false, summary: result.summary },
-      }));
-    } catch (err) {
-      setBbpsById((prev) => ({
-        ...prev,
-        [id]: {
-          paid: false,
-          verified: false,
-          summary: err instanceof ApiError ? err.message : "The BBPS check failed",
-        },
-      }));
-    } finally {
-      setCheckingId(null);
+      setVerifyingManual(false);
     }
   }
 
@@ -763,10 +739,6 @@ export default function OrganisationBillPaymentsPage() {
   const corpLabel = corpOptions.find(([id]) => id === selectedCorpId)?.[1];
   const vendorLabel = vendorOptions.find(([id]) => id === selectedAssigneeId)?.[1];
   const assignableCount = assignLines?.filter((line) => line.willAssign).length ?? 0;
-  const manualVerifyIds = (verifyIds ?? []).filter(
-    (id) => manualIds.has(id) && !bbpsById[id]?.verified,
-  );
-  const multipleVerify = (verifyIds?.length ?? 0) > 1;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -815,6 +787,9 @@ export default function OrganisationBillPaymentsPage() {
               key={item.key}
               type="button"
               onClick={() => {
+                if ((queue === "PAID") !== (item.key === "PAID")) {
+                  setSelectedIds(new Set());
+                }
                 setQueue(item.key);
                 setCurrentPage(1);
               }}
@@ -837,6 +812,99 @@ export default function OrganisationBillPaymentsPage() {
             </button>
           );
         })}
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-100 px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
+          <span>
+            {queue === "PAID"
+              ? "Paid bills"
+              : queue === "ASSIGNED"
+                ? "Assigned bills"
+                : queue === "NOT_ASSIGNED"
+                  ? "Unassigned bills"
+                  : "Bill payments"}
+            <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+              {visible.length}
+            </span>
+          </span>
+          <span className="text-slate-300">·</span>
+          <span className="font-mono text-slate-700">
+            Total amount: <span className="text-slate-900">{inr(visibleTotalAmount)}</span>
+          </span>
+          {queue !== "PAID" && selectedRows.length > 0 && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="font-mono font-bold text-indigo-700">
+                Selected ({selectedRows.length}):{" "}
+                {inr(selectedRows.reduce((sum, r) => sum + r.billAmount, 0))}
+              </span>
+            </>
+          )}
+          {queue === "PAID" && selectedPaidRows.length > 0 && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="font-mono font-bold text-indigo-700">
+                Selected ({selectedPaidRows.length}):{" "}
+                {inr(selectedPaidRows.reduce((sum, r) => sum + r.billAmount, 0))}
+              </span>
+            </>
+          )}
+        </div>
+
+        {queue !== "PAID" && selectedRows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              icon={<PackageCheck size={14} />}
+              loading={bulkPickingUp}
+              disabled={!canMarkInProgress}
+              onClick={markSelectedInProgress}
+            >
+              Mark In Progress ({selectedRows.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<UserPlus size={14} />}
+              disabled={!canAssignVendors || bulkPickingUp}
+              onClick={openAssignModal}
+            >
+              Assign To Vendors ({selectedRows.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<Zap size={14} />}
+              disabled
+              title="Direct payment via BBPS API coming soon"
+            >
+              Direct Pay
+            </Button>
+          </div>
+        )}
+
+        {queue === "PAID" && selectedPaidRows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              icon={<ShieldCheck size={14} />}
+              disabled={!canVerify}
+              onClick={openBbpsVerifyModal}
+            >
+              BBPS Verify ({selectedPaidRows.length})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              icon={<CheckCircle2 size={14} />}
+              disabled={!canVerify}
+              onClick={openManualVerifyModal}
+            >
+              Manual Verify ({selectedPaidRows.length})
+            </Button>
+          </div>
+        )}
       </div>
 
       {activeFilterCount > 0 && (
@@ -898,8 +966,8 @@ export default function OrganisationBillPaymentsPage() {
       )}
 
       <ListCard fitContent={false}>
-        <div className="shrink-0 border-b border-slate-100 px-4 py-3">
-          <div className="relative sm:max-w-sm">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative sm:max-w-sm sm:flex-1">
             <Search
               size={16}
               className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
@@ -915,47 +983,14 @@ export default function OrganisationBillPaymentsPage() {
               className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
-        </div>
-
-        {selectedRows.length > 0 && (
-          <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-indigo-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm font-semibold text-slate-800">
-              {selectedRows.length} {selectedRows.length === 1 ? "bill" : "bills"} selected
-              <span className="ml-2 font-mono text-xs font-semibold text-indigo-700">
-                ({inr(selectedRows.reduce((sum, r) => sum + r.billAmount, 0))})
-              </span>
+          {selectableVisible.length > 0 && (
+            <p className="text-xs font-bold text-blue-600">
+              {queue === "PAID"
+                ? "Select the bills you want to verify using the checkboxes."
+                : "Select the bills you want to act on using the checkboxes."}
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                icon={<PackageCheck size={14} />}
-                loading={bulkPickingUp}
-                disabled={!canMarkInProgress}
-                onClick={markSelectedInProgress}
-              >
-                Mark In Progress
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                icon={<UserPlus size={14} />}
-                disabled={!canAssignVendors || bulkPickingUp}
-                onClick={openAssignModal}
-              >
-                Assign To Vendors
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                icon={<Zap size={14} />}
-                disabled
-                title="Direct payment via BBPS API coming soon"
-              >
-                Direct Pay
-              </Button>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {loading ? (
           <TableSkeleton cols={9} />
@@ -978,7 +1013,11 @@ export default function OrganisationBillPaymentsPage() {
                     <input
                       key="select-all"
                       type="checkbox"
-                      aria-label="Select all unpicked payments"
+                      aria-label={
+                        queue === "PAID"
+                          ? "Select all paid payments"
+                          : "Select all unpicked payments"
+                      }
                       checked={allSelectableSelected}
                       onChange={toggleSelectAll}
                       className="h-4 w-4 rounded border-slate-300"
@@ -992,7 +1031,7 @@ export default function OrganisationBillPaymentsPage() {
                   "Amount",
                   "Bill Status",
                   "Vendor Status",
-                  "Corp Paid On",
+                  queue === "PAID" ? "Paid On" : "Corp Paid On",
                   "",
                 ]}
               />
@@ -1000,7 +1039,8 @@ export default function OrganisationBillPaymentsPage() {
                 {paged.map((p) => {
                   const expanded = expandedIds.has(p.id);
                   const vendorBadge = vendorStatusBadge(p);
-                  const selectable = isUnpickedRow(p);
+                  const selectable =
+                    queue === "PAID" ? isPaidUnverifiedRow(p) : isUnpickedRow(p);
                   return (
                     <Fragment key={p.id}>
                       <TR className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
@@ -1068,17 +1108,15 @@ export default function OrganisationBillPaymentsPage() {
                           <StatusBadge status={vendorBadge.status} label={vendorBadge.label} />
                         </TD>
                         <TD className="text-xs text-slate-500">
-                          {formatDateTime(p.corpPaymentOn)}
+                          {formatDateTime(queue === "PAID" ? p.billPaidOn : p.corpPaymentOn)}
                         </TD>
                         <TD>
                           <div className="flex items-center justify-end gap-2.5">
-                            <div onClick={(e) => e.stopPropagation()}>
-                              <RowAction
-                                payment={p}
-                                onSettle={() => openSettle(p)}
-                                onVerify={() => openVerify([p.id])}
-                              />
-                            </div>
+                            {queue !== "PAID" && (
+                              <div onClick={(e) => e.stopPropagation()}>
+                                <RowAction payment={p} onSettle={() => openSettle(p)} />
+                              </div>
+                            )}
                             <span className="text-slate-300">
                               {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </span>
@@ -1267,141 +1305,203 @@ export default function OrganisationBillPaymentsPage() {
       </Modal>
 
       <Modal
-        open={verifyIds != null}
-        onClose={closeVerify}
-        dismissable={!verifying && !checkingBbps && !checkingId}
-        size={multipleVerify ? "xl" : "md"}
+        open={bbpsVerifyModalOpen}
+        onClose={closeBbpsVerifyModal}
+        dismissable={!verifyingBbps}
+        size="xl"
         title={
-          verifyIds?.length === 1
-            ? "Verify this payment"
-            : `Verify ${verifyIds?.length ?? 0} payments`
+          bbpsModalTargets.length === 1
+            ? "Confirm BBPS Verification"
+            : `Confirm BBPS Verification (${bbpsModalTargets.length} bills)`
         }
-        description={
-          multipleVerify
-            ? "Bills the provider shows as paid are verified immediately. Select any that are still due and verify them yourself."
-            : "If the provider shows this bill as paid, it is verified immediately. Otherwise you can still verify it yourself."
-        }
+        description="Paytrix will query the live BBPS API for each selected bill and automatically mark bills as verified where the biller reports ₹0 pending."
         footer={
-          <>
-            <Button
-              variant="outline"
-              disabled={verifying || checkingBbps || !!checkingId}
-              onClick={closeVerify}
-            >
-              Cancel
-            </Button>
-            {multipleVerify && (
+          bbpsOutcomes ? (
+            <Button onClick={closeBbpsVerifyModal}>Done</Button>
+          ) : (
+            <>
               <Button
                 variant="outline"
-                loading={checkingBbps}
-                disabled={verifying}
-                onClick={checkSelectedWithBbps}
+                disabled={verifyingBbps}
+                onClick={closeBbpsVerifyModal}
               >
-                Check with BBPS
+                Cancel
               </Button>
-            )}
-            <Button
-              loading={verifying}
-              disabled={
-                checkingBbps || !!checkingId || (multipleVerify && manualVerifyIds.length === 0)
-              }
-              onClick={() => verifyIds && verifyBills(multipleVerify ? manualVerifyIds : verifyIds)}
-            >
-              {multipleVerify ? `Verify ${manualVerifyIds.length}` : "Verify"}
-            </Button>
-          </>
+              <Button
+                icon={<ShieldCheck size={15} />}
+                loading={verifyingBbps}
+                disabled={bbpsModalTargets.length === 0}
+                onClick={confirmBbpsVerify}
+              >
+                {bbpsModalTargets.length === 1
+                  ? "Verify via BBPS"
+                  : `Verify ${bbpsModalTargets.length} via BBPS`}
+              </Button>
+            </>
+          )
         }
       >
-        {verifyIds?.length === 1 && (
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!payments.find((p) => p.id === verifyIds[0])?.hasPaymentProof}
-              onClick={() => openProof(verifyIds[0])}
-            >
-              {payments.find((p) => p.id === verifyIds[0])?.hasPaymentProof
-                ? "View proof"
-                : "No proof attached"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              loading={checkingId === verifyIds[0]}
-              onClick={() => runBbpsCheck(verifyIds[0])}
-            >
-              Check with BBPS
-            </Button>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/70 px-3.5 py-2.5 text-xs">
+            <span className="font-semibold text-slate-700">
+              Selected {bbpsModalTargets.length === 1 ? "bill" : "bills"}:{" "}
+              <span className="font-bold text-slate-900">{bbpsModalTargets.length}</span>
+            </span>
+            <span className="font-mono font-bold text-indigo-700">
+              {inr(bbpsModalTargets.reduce((sum, r) => sum + r.billAmount, 0))}
+            </span>
           </div>
-        )}
-        {verifyIds?.length === 1 && bbpsById[verifyIds[0]] && (
-          <p
-            className={cn(
-              "mb-3 text-sm",
-              bbpsById[verifyIds[0]].verified ? "font-medium text-emerald-700" : "text-amber-800",
-            )}
-          >
-            {bbpsById[verifyIds[0]].summary}
-          </p>
-        )}
-        {multipleVerify ? (
-          <ul className="flex max-h-80 flex-col gap-2 overflow-auto">
-            {verifyIds?.map((id) => {
-              const payment = payments.find((item) => item.id === id);
-              const check = bbpsById[id];
+
+          <ul className="flex max-h-72 flex-col gap-2 overflow-auto">
+            {bbpsModalTargets.map((row) => {
+              const outcome = bbpsOutcomes?.[row.id];
               return (
-                <li key={id} className="rounded-xl border border-slate-200 px-3 py-2.5">
-                  <div className="flex items-start gap-3">
-                    {check?.verified ? (
-                      <span className="mt-0.5 text-xs font-semibold text-emerald-700">Verified</span>
-                    ) : (
-                      <input
-                        type="checkbox"
-                        className="mt-1 h-4 w-4 rounded border-slate-300"
-                        aria-label={`Verify payment ${id}`}
-                        checked={manualIds.has(id)}
-                        disabled={checkingBbps || verifying}
-                        onChange={() => toggleManual(id)}
-                      />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">
-                            {payment?.operatorName || payment?.corpName || "Payment"}
-                          </p>
-                          <p className="mt-0.5 text-xs text-slate-500">
-                            <span className="font-mono">
-                              {payment?.consumerId || payment?.transactionReferenceNumber || id}
-                            </span>
-                            {payment?.billAssignedTo === "VENDOR"
-                              ? ` · ${payment.billAssignedToName}`
-                              : ""}
-                          </p>
-                        </div>
-                        <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
-                          {payment ? inr(payment.billAmount) : ""}
-                        </p>
-                      </div>
-                      {check && (
-                        <p
-                          className={cn(
-                            "mt-2 text-sm",
-                            check.verified ? "font-medium text-emerald-700" : "text-amber-800",
-                          )}
-                        >
-                          {check.summary}
-                        </p>
+                <li key={row.id} className="rounded-xl border border-slate-200 px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {row.operatorName || "Bill"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        <span className="font-mono">{row.consumerId ?? row.billId ?? "—"}</span>
+                        {row.corpName ? ` · ${row.corpName}` : ""}
+                        {row.billAssignedTo === "VENDOR" && row.billAssignedToName
+                          ? ` · ${row.billAssignedToName}`
+                          : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <p className="font-mono text-sm font-semibold text-slate-900">
+                        {inr(row.billAmount)}
+                      </p>
+                      {outcome && (
+                        <StatusBadge
+                          status={outcome.verified ? "APPROVED" : "PENDING"}
+                          label={outcome.verified ? "Verified" : "Not verified"}
+                        />
                       )}
                     </div>
                   </div>
+                  {outcome && (
+                    <p
+                      className={cn(
+                        "mt-2 text-xs",
+                        outcome.verified ? "font-medium text-emerald-700" : "text-amber-800",
+                      )}
+                    >
+                      {outcome.note}
+                    </p>
+                  )}
                 </li>
               );
             })}
           </ul>
-        ) : (
-          <p className="text-sm text-slate-600">Confirm this vendor payment.</p>
-        )}
+        </div>
+      </Modal>
+
+      <Modal
+        open={manualVerifyModalOpen}
+        onClose={closeManualVerifyModal}
+        dismissable={!verifyingManual}
+        size="xl"
+        title={
+          selectedPaidRows.length === 1
+            ? "Confirm Manual Verification"
+            : `Confirm Manual Verification (${selectedPaidRows.length} bills)`
+        }
+        description="Manually mark the selected paid bills as verified. Provide a reason to record in the verification activity log."
+        footer={
+          <>
+            <Button
+              variant="outline"
+              disabled={verifyingManual}
+              onClick={closeManualVerifyModal}
+            >
+              Cancel
+            </Button>
+            <Button
+              icon={<CheckCircle2 size={15} />}
+              loading={verifyingManual}
+              disabled={selectedPaidRows.length === 0 || !manualReason.trim()}
+              onClick={confirmManualVerify}
+            >
+              {selectedPaidRows.length === 1
+                ? "Manual Verify"
+                : `Manual Verify (${selectedPaidRows.length})`}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50/70 px-3.5 py-2.5 text-xs">
+            <span className="font-semibold text-slate-700">
+              Selected {selectedPaidRows.length === 1 ? "bill" : "bills"}:{" "}
+              <span className="font-bold text-slate-900">{selectedPaidRows.length}</span>
+            </span>
+            <span className="font-mono font-bold text-indigo-700">
+              {inr(selectedPaidRows.reduce((sum, r) => sum + r.billAmount, 0))}
+            </span>
+          </div>
+
+          <ul className="flex max-h-56 flex-col gap-2 overflow-auto">
+            {selectedPaidRows.map((row) => (
+              <li key={row.id} className="rounded-xl border border-slate-200 px-3 py-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {row.operatorName || "Bill"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      <span className="font-mono">{row.consumerId ?? row.billId ?? "—"}</span>
+                      {row.corpName ? ` · ${row.corpName}` : ""}
+                      {row.billAssignedTo === "VENDOR" && row.billAssignedToName
+                        ? ` · ${row.billAssignedToName}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {row.hasPaymentProof && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        type="button"
+                        onClick={() => openProof(row.id)}
+                      >
+                        View proof
+                      </Button>
+                    )}
+                    <p className="font-mono text-sm font-semibold text-slate-900">
+                      {inr(row.billAmount)}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="manual-verify-reason"
+                className="text-xs font-semibold text-slate-700"
+              >
+                Reason <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[11px] text-slate-400">{manualReason.length}/500</span>
+            </div>
+            <textarea
+              id="manual-verify-reason"
+              rows={3}
+              maxLength={500}
+              required
+              disabled={verifyingManual}
+              value={manualReason}
+              onChange={(e) => setManualReason(e.target.value)}
+              placeholder="Enter reason for manual verification (e.g. verified against bank UTR or biller receipt)..."
+              className="min-h-24 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+            />
+          </div>
+        </div>
       </Modal>
 
       <Modal
@@ -1628,13 +1728,28 @@ export default function OrganisationBillPaymentsPage() {
   );
 }
 
+function isUnpaidQueueRow(payment: BillPaymentRow): boolean {
+  return payment.billPaidOn == null && !payment.verified;
+}
+
+function isPaidUnverifiedRow(payment: BillPaymentRow): boolean {
+  return payment.billPaidOn != null && !payment.verified;
+}
+
 function isUnpickedRow(payment: BillPaymentRow): boolean {
-  return payment.billAssignedTo !== "VENDOR" && payment.orgStatus === "PENDING";
+  return (
+    isUnpaidQueueRow(payment) &&
+    payment.billAssignedTo !== "VENDOR" &&
+    payment.orgStatus === "PENDING"
+  );
 }
 
 function billStatusOf(payment: BillPaymentRow): string {
+  if (payment.billPaidOn != null || payment.verified) {
+    return "PAID";
+  }
   if (payment.billAssignedTo === "VENDOR") {
-    return payment.verified ? "PAID" : "PENDING";
+    return "PENDING";
   }
   return payment.awaitingChecker ? "AWAITING_CHECKER" : payment.orgStatus;
 }
@@ -1664,23 +1779,11 @@ function vendorStatusBadge(payment: BillPaymentRow): { status: string; label: st
 function RowAction({
   payment,
   onSettle,
-  onVerify,
 }: {
   payment: BillPaymentRow;
   onSettle: () => void;
-  onVerify: () => void;
 }) {
-  const role = getUser()?.role;
-  const canVerify = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN" || role === "CHECKER";
-
-  if (payment.vendorStage === "VENDOR_PAID" && canVerify) {
-    return (
-      <Button size="sm" icon={<ShieldCheck size={14} />} onClick={onVerify}>
-        Verify
-      </Button>
-    );
-  }
-  if (payment.billAssignedTo === "VENDOR") {
+  if (payment.billAssignedTo === "VENDOR" || payment.billPaidOn != null) {
     return null;
   }
   if (payment.orgStatus === "IN_PROCESS" && payment.canSettle) {
