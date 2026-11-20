@@ -39,6 +39,7 @@ const DIRECTION_TABS: { key: Direction; label: string }[] = [
 const CATEGORY_LABELS: Record<string, string> = {
   RECHARGE: "Recharge",
   BILL_PAID: "Vendor payment",
+  BILLER_PAID: "Biller payment",
   COMMISSION: "Commission",
 };
 
