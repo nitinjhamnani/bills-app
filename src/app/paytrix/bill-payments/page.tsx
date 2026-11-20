@@ -142,11 +142,11 @@ export default function OrganisationBillPaymentsPage() {
   const [resultsModalOpen, setResultsModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [settleTarget, setSettleTarget] = useState<BillPaymentRow | null>(null);
+  const [settleTargets, setSettleTargets] = useState<BillPaymentRow[] | null>(null);
   const [settleMode, setSettleMode] = useState<"paid" | "failed">("paid");
   const [busyAction, setBusyAction] = useState(false);
-  const [bbpsTxn, setBbpsTxn] = useState("");
-  const [externalTxn, setExternalTxn] = useState("");
+  const [bbpsTxns, setBbpsTxns] = useState<Record<string, string>>({});
+  const [externalTxns, setExternalTxns] = useState<Record<string, string>>({});
   const [billType, setBillType] = useState("");
   const [failReason, setFailReason] = useState("");
 
@@ -175,7 +175,7 @@ export default function OrganisationBillPaymentsPage() {
       setPayments(next);
       const selectable = new Set(
         next
-          .filter((row) => isUnpickedRow(row) || isPaidUnverifiedRow(row))
+          .filter((row) => isSelectableUnpaidRow(row) || isPaidUnverifiedRow(row))
           .map((row) => row.id),
       );
       setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => selectable.has(id))));
@@ -319,19 +319,18 @@ export default function OrganisationBillPaymentsPage() {
     amountRangeActive,
   ].filter(Boolean).length;
 
-  const selectableVisible = useMemo(
-    () =>
-      visible.filter((p) =>
-        queue === "PAID" ? isPaidUnverifiedRow(p) : isUnpickedRow(p),
-      ),
-    [visible, queue],
-  );
-
-  const allSelectableSelected =
-    selectableVisible.length > 0 && selectableVisible.every((p) => selectedIds.has(p.id));
-
   const selectedRows = useMemo(
     () => payments.filter((p) => selectedIds.has(p.id) && isUnpickedRow(p)),
+    [payments, selectedIds],
+  );
+
+  const selectedInProgressRows = useMemo(
+    () => payments.filter((p) => selectedIds.has(p.id) && isInProgressOrgRow(p)),
+    [payments, selectedIds],
+  );
+
+  const selectedUnpaidRows = useMemo(
+    () => payments.filter((p) => selectedIds.has(p.id) && isSelectableUnpaidRow(p)),
     [payments, selectedIds],
   );
 
@@ -339,6 +338,33 @@ export default function OrganisationBillPaymentsPage() {
     () => payments.filter((p) => selectedIds.has(p.id) && isPaidUnverifiedRow(p)),
     [payments, selectedIds],
   );
+
+  const unpaidSelectionLock: "PENDING" | "IN_PROCESS" | null =
+    selectedRows.length > 0 && selectedInProgressRows.length === 0
+      ? "PENDING"
+      : selectedInProgressRows.length > 0 && selectedRows.length === 0
+        ? "IN_PROCESS"
+        : null;
+
+  function canSelectPaymentRow(p: BillPaymentRow): boolean {
+    if (queue === "PAID") return isPaidUnverifiedRow(p);
+    if (!isSelectableUnpaidRow(p)) return false;
+    if (unpaidSelectionLock === "PENDING") return isUnpickedRow(p);
+    if (unpaidSelectionLock === "IN_PROCESS") return isInProgressOrgRow(p);
+    return true;
+  }
+
+  const selectableVisible = useMemo(() => {
+    if (queue === "PAID") return visible.filter(isPaidUnverifiedRow);
+    const eligible = visible.filter(isSelectableUnpaidRow);
+    if (unpaidSelectionLock === "PENDING") return eligible.filter(isUnpickedRow);
+    if (unpaidSelectionLock === "IN_PROCESS") return eligible.filter(isInProgressOrgRow);
+    const pendingInView = eligible.filter(isUnpickedRow);
+    return pendingInView.length > 0 ? pendingInView : eligible;
+  }, [visible, queue, unpaidSelectionLock]);
+
+  const allSelectableSelected =
+    selectableVisible.length > 0 && selectableVisible.every((p) => selectedIds.has(p.id));
 
   const currentRole = getUser()?.role;
   const canMarkInProgress =
@@ -364,9 +390,7 @@ export default function OrganisationBillPaymentsPage() {
 
   function toggleSelect(id: string) {
     const row = payments.find((p) => p.id === id);
-    if (!row) return;
-    const allowed = queue === "PAID" ? isPaidUnverifiedRow(row) : isUnpickedRow(row);
-    if (!allowed) return;
+    if (!row || !canSelectPaymentRow(row)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -397,41 +421,71 @@ export default function OrganisationBillPaymentsPage() {
     });
   }
 
-  function openSettle(payment: BillPaymentRow) {
-    setBbpsTxn("");
-    setExternalTxn("");
+  function openSettleModal() {
+    if (selectedInProgressRows.length === 0) return;
+    setBbpsTxns({});
+    setExternalTxns({});
     setBillType("");
     setFailReason("");
     setSettleMode("paid");
-    setSettleTarget(payment);
+    setSettleTargets(selectedInProgressRows);
   }
 
   async function submitSettle(e: React.FormEvent) {
     e.preventDefault();
-    if (!settleTarget) return;
+    if (!settleTargets || settleTargets.length === 0) return;
+    if (settleMode === "failed" && !failReason.trim()) {
+      toast.error("Please enter a failure reason");
+      return;
+    }
     setBusyAction(true);
+    let ok = 0;
+    let failed = 0;
+    let lastError: string | null = null;
     try {
-      if (settleMode === "paid") {
-        await apiFetch(`/api/v1/paytrix/my-payments/${settleTarget.id}/mark-paid`, {
-          method: "POST",
-          body: {
-            bbpsTransactionId: bbpsTxn || null,
-            externalTransactionId: externalTxn || null,
-            billType: billType || null,
-          },
-        });
-        toast.success("Bill payment marked as paid");
-      } else {
-        await apiFetch(`/api/v1/paytrix/my-payments/${settleTarget.id}/mark-failed`, {
-          method: "POST",
-          body: { reason: failReason },
-        });
-        toast.success("Marked failed - sent back to the queue");
+      for (const target of settleTargets) {
+        try {
+          if (settleMode === "paid") {
+            await apiFetch(`/api/v1/paytrix/my-payments/${target.id}/mark-paid`, {
+              method: "POST",
+              body: {
+                bbpsTransactionId: (bbpsTxns[target.id] ?? "").trim() || null,
+                externalTransactionId: (externalTxns[target.id] ?? "").trim() || null,
+                billType: billType.trim() || null,
+              },
+            });
+          } else {
+            await apiFetch(`/api/v1/paytrix/my-payments/${target.id}/mark-failed`, {
+              method: "POST",
+              body: { reason: failReason.trim() },
+            });
+          }
+          ok++;
+        } catch (err) {
+          failed++;
+          lastError = err instanceof ApiError ? err.message : "Action failed";
+        }
       }
-      setSettleTarget(null);
+      if (failed === 0) {
+        toast.success(
+          settleMode === "paid"
+            ? ok === 1
+              ? "Bill payment marked as paid"
+              : `Marked ${ok} bill payments as paid`
+            : ok === 1
+              ? "Marked failed — sent back to queue"
+              : `Marked ${ok} bills failed — sent back to queue`,
+        );
+        setSettleTargets(null);
+        setSelectedIds(new Set());
+      } else {
+        toast.error(
+          ok > 0
+            ? `Processed ${ok} of ${settleTargets.length}. ${lastError ?? ""}`
+            : lastError ?? "Action failed",
+        );
+      }
       await load(true);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Action failed");
     } finally {
       setBusyAction(false);
     }
@@ -832,12 +886,12 @@ export default function OrganisationBillPaymentsPage() {
           <span className="font-mono text-slate-700">
             Total amount: <span className="text-slate-900">{inr(visibleTotalAmount)}</span>
           </span>
-          {queue !== "PAID" && selectedRows.length > 0 && (
+          {queue !== "PAID" && selectedUnpaidRows.length > 0 && (
             <>
               <span className="text-slate-300">·</span>
               <span className="font-mono font-bold text-indigo-700">
-                Selected ({selectedRows.length}):{" "}
-                {inr(selectedRows.reduce((sum, r) => sum + r.billAmount, 0))}
+                Selected ({selectedUnpaidRows.length}):{" "}
+                {inr(selectedUnpaidRows.reduce((sum, r) => sum + r.billAmount, 0))}
               </span>
             </>
           )}
@@ -852,35 +906,68 @@ export default function OrganisationBillPaymentsPage() {
           )}
         </div>
 
-        {queue !== "PAID" && selectedRows.length > 0 && (
+        {queue !== "PAID" && selectedUnpaidRows.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              icon={<PackageCheck size={14} />}
-              loading={bulkPickingUp}
-              disabled={!canMarkInProgress}
-              onClick={markSelectedInProgress}
-            >
-              Mark In Progress ({selectedRows.length})
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              icon={<UserPlus size={14} />}
-              disabled={!canAssignVendors || bulkPickingUp}
-              onClick={openAssignModal}
-            >
-              Assign To Vendors ({selectedRows.length})
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              icon={<Zap size={14} />}
-              disabled
-              title="Direct payment via BBPS API coming soon"
-            >
-              Direct Pay
-            </Button>
+            {selectedRows.length > 0 && (
+              <Button
+                size="sm"
+                icon={<PackageCheck size={14} />}
+                loading={bulkPickingUp}
+                disabled={!canMarkInProgress || selectedInProgressRows.length > 0}
+                title={
+                  selectedInProgressRows.length > 0
+                    ? "Select only pending bills to mark in progress"
+                    : undefined
+                }
+                onClick={markSelectedInProgress}
+              >
+                Mark In Progress ({selectedRows.length})
+              </Button>
+            )}
+            {selectedInProgressRows.length > 0 && (
+              <Button
+                size="sm"
+                icon={<CheckCircle2 size={14} />}
+                disabled={
+                  selectedRows.length > 0 ||
+                  !selectedInProgressRows.every((r) => r.canSettle)
+                }
+                title={
+                  selectedRows.length > 0
+                    ? "Select only in-progress bills to mark as paid"
+                    : !selectedInProgressRows.every((r) => r.canSettle)
+                      ? "Selected bill requires checker/admin approval"
+                      : undefined
+                }
+                onClick={openSettleModal}
+              >
+                Mark as Paid ({selectedInProgressRows.length})
+              </Button>
+            )}
+            {selectedRows.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                icon={<UserPlus size={14} />}
+                disabled={
+                  !canAssignVendors || bulkPickingUp || selectedInProgressRows.length > 0
+                }
+                onClick={openAssignModal}
+              >
+                Assign To Vendors ({selectedRows.length})
+              </Button>
+            )}
+            {selectedRows.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                icon={<Zap size={14} />}
+                disabled
+                title="Direct payment via BBPS API coming soon"
+              >
+                Direct Pay
+              </Button>
+            )}
           </div>
         )}
 
@@ -1039,8 +1126,7 @@ export default function OrganisationBillPaymentsPage() {
                 {paged.map((p) => {
                   const expanded = expandedIds.has(p.id);
                   const vendorBadge = vendorStatusBadge(p);
-                  const selectable =
-                    queue === "PAID" ? isPaidUnverifiedRow(p) : isUnpickedRow(p);
+                  const selectable = canSelectPaymentRow(p);
                   return (
                     <Fragment key={p.id}>
                       <TR className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
@@ -1111,12 +1197,7 @@ export default function OrganisationBillPaymentsPage() {
                           {formatDateTime(queue === "PAID" ? p.billPaidOn : p.corpPaymentOn)}
                         </TD>
                         <TD>
-                          <div className="flex items-center justify-end gap-2.5">
-                            {queue !== "PAID" && (
-                              <div onClick={(e) => e.stopPropagation()}>
-                                <RowAction payment={p} onSettle={() => openSettle(p)} />
-                              </div>
-                            )}
+                          <div className="flex items-center justify-end">
                             <span className="text-slate-300">
                               {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </span>
@@ -1544,17 +1625,30 @@ export default function OrganisationBillPaymentsPage() {
       </Modal>
 
       <Modal
-        open={settleTarget !== null}
-        onClose={() => setSettleTarget(null)}
-        title="Record settlement"
+        open={settleTargets !== null}
+        onClose={() => !busyAction && setSettleTargets(null)}
+        dismissable={false}
+        size={settleTargets && settleTargets.length > 1 ? "xl" : "md"}
+        title={
+          settleTargets && settleTargets.length > 1
+            ? `Mark ${settleTargets.length} bills as paid`
+            : "Mark bill as paid"
+        }
         description={
-          settleTarget
-            ? `${settleTarget.operatorName || settleTarget.corpName} · ${inr(settleTarget.billAmount)}${settleTarget.consumerId ? ` · ${settleTarget.consumerId}` : ""}`
-            : undefined
+          settleTargets && settleTargets.length === 1
+            ? `${settleTargets[0].operatorName || settleTargets[0].corpName} · ${inr(settleTargets[0].billAmount)}${settleTargets[0].consumerId ? ` · ${settleTargets[0].consumerId}` : ""}`
+            : settleTargets
+              ? `Enter the transaction reference and BBPS reference for each of the ${settleTargets.length} selected bills (${inr(settleTargets.reduce((sum, r) => sum + r.billAmount, 0))}).`
+              : undefined
         }
         footer={
           <>
-            <Button variant="outline" type="button" onClick={() => setSettleTarget(null)}>
+            <Button
+              variant="outline"
+              type="button"
+              disabled={busyAction}
+              onClick={() => setSettleTargets(null)}
+            >
               Cancel
             </Button>
             <Button
@@ -1563,7 +1657,11 @@ export default function OrganisationBillPaymentsPage() {
               variant={settleMode === "failed" ? "danger" : "primary"}
               loading={busyAction}
             >
-              {settleMode === "paid" ? "Mark paid" : "Mark failed"}
+              {settleMode === "paid"
+                ? settleTargets && settleTargets.length > 1
+                  ? `Mark ${settleTargets.length} as Paid`
+                  : "Mark as Paid"
+                : "Mark Failed"}
             </Button>
           </>
         }
@@ -1592,29 +1690,107 @@ export default function OrganisationBillPaymentsPage() {
             </button>
           </div>
           {settleMode === "paid" ? (
-            <>
-              <Field
-                label="BBPS transaction ID"
-                value={bbpsTxn}
-                onChange={(e) => setBbpsTxn(e.target.value)}
-              />
-              <Field
-                label="External transaction ID"
-                value={externalTxn}
-                onChange={(e) => setExternalTxn(e.target.value)}
-              />
-              <Field
-                label="How it was settled"
-                hint="For example BBPS, NEFT, or MANUAL."
-                value={billType}
-                onChange={(e) => setBillType(e.target.value)}
-              />
-            </>
+            settleTargets && settleTargets.length === 1 ? (
+              <>
+                <Field
+                  label="Transaction reference ID"
+                  value={externalTxns[settleTargets[0].id] ?? ""}
+                  onChange={(e) =>
+                    setExternalTxns((prev) => ({
+                      ...prev,
+                      [settleTargets[0].id]: e.target.value,
+                    }))
+                  }
+                />
+                <Field
+                  label="BBPS reference ID"
+                  value={bbpsTxns[settleTargets[0].id] ?? ""}
+                  onChange={(e) =>
+                    setBbpsTxns((prev) => ({ ...prev, [settleTargets[0].id]: e.target.value }))
+                  }
+                />
+                <Field
+                  label="How it was settled"
+                  hint="For example BBPS, NEFT, or MANUAL."
+                  value={billType}
+                  onChange={(e) => setBillType(e.target.value)}
+                />
+              </>
+            ) : (
+              <div className="flex flex-col">
+                <div className="hidden border-b border-slate-200 pb-2 text-[11px] font-bold tracking-wider text-slate-400 uppercase md:grid md:grid-cols-2 md:gap-4">
+                  <span>Bill Details</span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <span>Transaction Ref.</span>
+                    <span>BBPS Ref.</span>
+                  </div>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {settleTargets?.map((target, index) => (
+                    <div
+                      key={target.id}
+                      className="grid grid-cols-1 items-center gap-2.5 py-2.5 md:grid-cols-2 md:gap-4"
+                    >
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-slate-900">
+                            <span className="mr-1.5 font-mono text-[11px] text-slate-400">
+                              #{index + 1}
+                            </span>
+                            {target.operatorName || target.corpName}
+                          </p>
+                          <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                            <span className="font-mono font-medium text-slate-700">
+                              {target.consumerId ?? target.billId ?? "—"}
+                            </span>
+                            {target.corpName ? ` · ${target.corpName}` : ""}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-mono text-xs font-semibold text-slate-900">
+                          {inr(target.billAmount)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          maxLength={120}
+                          disabled={busyAction}
+                          placeholder="Transaction ref."
+                          aria-label={`Transaction reference for ${target.consumerId ?? target.id}`}
+                          value={externalTxns[target.id] ?? ""}
+                          onChange={(e) =>
+                            setExternalTxns((prev) => ({
+                              ...prev,
+                              [target.id]: e.target.value,
+                            }))
+                          }
+                          className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+                        />
+                        <input
+                          type="text"
+                          maxLength={120}
+                          disabled={busyAction}
+                          placeholder="BBPS ref."
+                          aria-label={`BBPS reference for ${target.consumerId ?? target.id}`}
+                          value={bbpsTxns[target.id] ?? ""}
+                          onChange={(e) =>
+                            setBbpsTxns((prev) => ({ ...prev, [target.id]: e.target.value }))
+                          }
+                          className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
           ) : (
             <label className="flex flex-col gap-1.5 text-sm">
               <span className="font-medium text-slate-700">Failure reason</span>
               <textarea
                 rows={3}
+                required
                 value={failReason}
                 onChange={(e) => setFailReason(e.target.value)}
                 className="min-h-24 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
@@ -1744,6 +1920,18 @@ function isUnpickedRow(payment: BillPaymentRow): boolean {
   );
 }
 
+function isInProgressOrgRow(payment: BillPaymentRow): boolean {
+  return (
+    isUnpaidQueueRow(payment) &&
+    payment.billAssignedTo !== "VENDOR" &&
+    payment.orgStatus === "IN_PROCESS"
+  );
+}
+
+function isSelectableUnpaidRow(payment: BillPaymentRow): boolean {
+  return isUnpickedRow(payment) || isInProgressOrgRow(payment);
+}
+
 function billStatusOf(payment: BillPaymentRow): string {
   if (payment.billPaidOn != null || payment.verified) {
     return "PAID";
@@ -1774,26 +1962,6 @@ function vendorStatusBadge(payment: BillPaymentRow): { status: string; label: st
     return { status: "IN_PROGRESS", label: "Assigned & In Progress" };
   }
   return { status: "PENDING", label: "Assigned & Pending" };
-}
-
-function RowAction({
-  payment,
-  onSettle,
-}: {
-  payment: BillPaymentRow;
-  onSettle: () => void;
-}) {
-  if (payment.billAssignedTo === "VENDOR" || payment.billPaidOn != null) {
-    return null;
-  }
-  if (payment.orgStatus === "IN_PROCESS" && payment.canSettle) {
-    return (
-      <Button size="sm" onClick={onSettle}>
-        Pay
-      </Button>
-    );
-  }
-  return null;
 }
 
 function PaymentDetail({

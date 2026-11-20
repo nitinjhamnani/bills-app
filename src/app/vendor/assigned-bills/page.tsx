@@ -1,7 +1,19 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, Download, FileText, Search, Upload } from "lucide-react";
+import {
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Download,
+  FileText,
+  PackageCheck,
+  RotateCcw,
+  Search,
+  Upload,
+} from "lucide-react";
 import { ConfirmAction, type ActionDetail } from "@/app/paytrix/vendor-rules/ConfirmAction";
 import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
@@ -79,10 +91,8 @@ export default function AssignedBillsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
-  const [confirmBill, setConfirmBill] = useState<{ kind: "progress" | "paid"; bill: BillPayment } | null>(null);
   const [progressQueue, setProgressQueue] = useState<BillPayment[] | null>(null);
   const [sendBackOpen, setSendBackOpen] = useState(false);
-  const [payBill, setPayBill] = useState<BillPayment | null>(null);
   const [bulkPayOpen, setBulkPayOpen] = useState(false);
   const [sheetFile, setSheetFile] = useState<File | null>(null);
   const [sheetPreview, setSheetPreview] = useState<SheetPreview | null>(null);
@@ -90,24 +100,34 @@ export default function AssignedBillsPage() {
 
   const canAct = canMark && account?.status === "ACTIVE";
   const pending = bills.filter(holding);
-  const allPendingSelected = pending.length > 0 && pending.every((bill) => selectedIds.has(bill.id));
   const showSelect = canAct && pending.length > 0;
   const assignedBills = bills.filter((bill) => stageOf(bill) === "ASSIGNED");
   const inProgressBills = bills.filter((bill) => stageOf(bill) === "IN_PROGRESS");
   const selectedAssigned = assignedBills.filter((bill) => selectedIds.has(bill.id));
   const selectedInProgress = inProgressBills.filter((bill) => selectedIds.has(bill.id));
+  const selectedTotal = useMemo(
+    () =>
+      bills
+        .filter((bill) => selectedIds.has(bill.id))
+        .reduce((sum, bill) => sum + bill.amount, 0),
+    [bills, selectedIds],
+  );
+  const isMultiPay = selectedInProgress.length > 1;
   const canBulkProgress =
     selectedIds.size > 0 &&
     selectedAssigned.length === selectedIds.size;
   const canBulkPay =
     selectedIds.size > 0 &&
     selectedInProgress.length === selectedIds.size;
-  const bulkPayReady = selectedInProgress.every(
-    (bill) => (references[bill.id] ?? "").trim() && (bbpsReferences[bill.id] ?? "").trim() && proofs[bill.id],
-  );
+  const bulkPayReady = selectedInProgress.every((bill) => {
+    const hasRefs =
+      Boolean((references[bill.id] ?? "").trim()) &&
+      Boolean((bbpsReferences[bill.id] ?? "").trim());
+    return isMultiPay ? hasRefs : hasRefs && Boolean(proofs[bill.id]);
+  });
   const columns = showSelect
-    ? ["", "Biller", "Corporate", "Consumer", "Due date", "Amount", "Status"]
-    : ["Biller", "Corporate", "Consumer", "Due date", "Amount", "Status"];
+    ? ["", "Biller", "Consumer", "Due date", "Amount", "Status", ""]
+    : ["Biller", "Consumer", "Due date", "Amount", "Status", ""];
 
   async function copyText(key: string, text: string) {
     try {
@@ -154,8 +174,7 @@ export default function AssignedBillsPage() {
         bill.billerName.toLowerCase().includes(needle) ||
         bill.billServiceName.toLowerCase().includes(needle) ||
         bill.customerBillAccountNumber.toLowerCase().includes(needle) ||
-        (bill.customerName ?? "").toLowerCase().includes(needle) ||
-        (bill.corporateName ?? "").toLowerCase().includes(needle),
+        (bill.customerName ?? "").toLowerCase().includes(needle),
     );
   }, [bills, query]);
 
@@ -188,7 +207,32 @@ export default function AssignedBillsPage() {
     return searched.filter((bill) => stageOf(bill) === stageFilter);
   }, [searched, stageFilter]);
 
+  const activeSelectionStage: "ASSIGNED" | "IN_PROGRESS" | null =
+    selectedAssigned.length > 0 && selectedInProgress.length === 0
+      ? "ASSIGNED"
+      : selectedInProgress.length > 0 && selectedAssigned.length === 0
+        ? "IN_PROGRESS"
+        : null;
+
+  function canSelectRow(bill: BillPayment): boolean {
+    if (!showSelect || !holding(bill)) return false;
+    const st = stageOf(bill);
+    if (activeSelectionStage && st !== activeSelectionStage) return false;
+    return true;
+  }
+
   const total = useMemo(() => visible.reduce((sum, bill) => sum + bill.amount, 0), [visible]);
+  const selectableVisible = useMemo(() => {
+    if (!showSelect) return [];
+    const holdingVisible = visible.filter(holding);
+    if (activeSelectionStage) {
+      return holdingVisible.filter((bill) => stageOf(bill) === activeSelectionStage);
+    }
+    const assignedInView = holdingVisible.filter((bill) => stageOf(bill) === "ASSIGNED");
+    return assignedInView.length > 0 ? assignedInView : holdingVisible;
+  }, [showSelect, visible, activeSelectionStage]);
+  const allVisibleSelected =
+    selectableVisible.length > 0 && selectableVisible.every((bill) => selectedIds.has(bill.id));
   const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const paged = useMemo(
     () => visible.slice((currentPage - 1) * pageSize, currentPage * pageSize),
@@ -200,6 +244,19 @@ export default function AssignedBillsPage() {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (selectableVisible.length > 0 && selectableVisible.every((bill) => prev.has(bill.id))) {
+        const next = new Set(prev);
+        for (const bill of selectableVisible) next.delete(bill.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const bill of selectableVisible) next.add(bill.id);
       return next;
     });
   }
@@ -216,20 +273,6 @@ export default function AssignedBillsPage() {
   function askMarkSelected() {
     if (!canBulkProgress) return;
     setProgressQueue(selectedAssigned);
-  }
-
-  async function markInProgress(id: string) {
-    setBusy(true);
-    try {
-      await apiFetch(`/api/v1/client/assigned-bills/${id}/in-progress`, { method: "POST" });
-      toast.success("Marked in progress");
-      setConfirmBill(null);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not mark this bill in progress");
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function markSelectedInProgress() {
@@ -258,33 +301,6 @@ export default function AssignedBillsPage() {
     }
   }
 
-  async function markPaid(id: string) {
-    setBusy(true);
-    try {
-      const formData = new FormData();
-      formData.append("transactionReference", references[id] ?? "");
-      formData.append("bbpsReference", bbpsReferences[id] ?? "");
-      const proof = proofs[id];
-      if (proof) formData.append("proof", proof);
-      const response = await trackedFetch(`${API_BASE_URL}/api/v1/client/assigned-bills/${id}/mark-paid`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}` },
-        body: formData,
-      });
-      if (!response.ok) {
-        throw new Error(await extractErrorMessage(response, "Could not mark this bill paid"));
-      }
-      toast.success("Sent to Paytrix for verification");
-      setConfirmBill(null);
-      setPayBill(null);
-      await load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not mark this bill paid");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function paySelected() {
     if (!canBulkPay || !bulkPayReady) return;
     setBusy(true);
@@ -293,9 +309,9 @@ export default function AssignedBillsPage() {
     for (const bill of selectedInProgress) {
       try {
         const formData = new FormData();
-        formData.append("transactionReference", references[bill.id] ?? "");
-        formData.append("bbpsReference", bbpsReferences[bill.id] ?? "");
-        const proof = proofs[bill.id];
+        formData.append("transactionReference", (references[bill.id] ?? "").trim());
+        formData.append("bbpsReference", (bbpsReferences[bill.id] ?? "").trim());
+        const proof = !isMultiPay ? proofs[bill.id] : undefined;
         if (proof) formData.append("proof", proof);
         const response = await trackedFetch(`${API_BASE_URL}/api/v1/client/assigned-bills/${bill.id}/mark-paid`, {
           method: "POST",
@@ -444,21 +460,6 @@ export default function AssignedBillsPage() {
     return <PageHeader title="Bill Payments" description="This page is for vendor accounts." />;
   }
 
-  const confirmDetails: ActionDetail[] = confirmBill
-    ? [
-        { label: "Biller", value: confirmBill.bill.billerName },
-        { label: "Consumer", value: confirmBill.bill.customerBillAccountNumber },
-        { label: "Amount", value: inr(confirmBill.bill.amount) },
-        ...(confirmBill.kind === "paid"
-          ? [
-              { label: "Transaction ref.", value: references[confirmBill.bill.id] || "—" },
-              { label: "BBPS ref.", value: bbpsReferences[confirmBill.bill.id] || "—" },
-              { label: "Proof", value: proofs[confirmBill.bill.id]?.name ?? "—" },
-            ]
-          : []),
-      ]
-    : [];
-
   const sheetDetails: ActionDetail[] = sheetPreview
     ? [
         { label: "In progress", value: String(sheetPreview.inProgress) },
@@ -508,6 +509,7 @@ export default function AssignedBillsPage() {
               key={item.key}
               type="button"
               onClick={() => {
+                setSelectedIds(new Set());
                 setStageFilter(item.key);
                 setCurrentPage(1);
               }}
@@ -542,40 +544,55 @@ export default function AssignedBillsPage() {
             )}
           </span>
           <span className="text-slate-300">·</span>
-          <span className="font-mono text-slate-700">Total amount: {inr(total)}</span>
+          <span className="font-mono text-slate-700">
+            Total amount: <span className="text-slate-900">{inr(total)}</span>
+          </span>
+          {showSelect && selectedIds.size > 0 && (
+            <>
+              <span className="text-slate-300">·</span>
+              <span className="font-mono font-bold text-indigo-700">
+                Selected ({selectedIds.size}): {inr(selectedTotal)}
+              </span>
+            </>
+          )}
         </div>
 
         {showSelect && selectedIds.size > 0 && (
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              type="button"
-              disabled={busy || !canBulkProgress}
-              title="Select assigned bills to mark in progress"
-              onClick={askMarkSelected}
-            >
-              Mark in progress ({selectedAssigned.length})
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              disabled={busy || !canBulkPay}
-              title="Select in-progress bills to pay"
-              onClick={() => setBulkPayOpen(true)}
-            >
-              Pay ({selectedInProgress.length})
-            </Button>
+            {stageFilter !== "IN_PROGRESS" && canBulkProgress && (
+              <Button
+                size="sm"
+                type="button"
+                icon={<PackageCheck size={14} />}
+                disabled={busy}
+                onClick={askMarkSelected}
+              >
+                Mark In Progress ({selectedAssigned.length})
+              </Button>
+            )}
+            {stageFilter !== "ASSIGNED" && canBulkPay && (
+              <Button
+                size="sm"
+                type="button"
+                icon={<CheckCircle2 size={14} />}
+                disabled={busy}
+                onClick={() => setBulkPayOpen(true)}
+              >
+                Mark as Paid ({selectedInProgress.length})
+              </Button>
+            )}
             <Button
               size="sm"
               type="button"
               variant="outline"
+              icon={<RotateCcw size={14} />}
               disabled={busy}
               onClick={() => {
                 setReason("");
                 setSendBackOpen(true);
               }}
             >
-              Send back ({selectedIds.size})
+              Send Back ({selectedIds.size})
             </Button>
           </div>
         )}
@@ -605,13 +622,13 @@ export default function AssignedBillsPage() {
                 setQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search by biller, consumer no., or corporate"
+              placeholder="Search by biller or consumer no."
               aria-label="Search payments"
               className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
-          {showSelect && (
-            <p className="text-sm font-bold text-blue-600">
+          {selectableVisible.length > 0 && (
+            <p className="text-xs font-bold text-blue-600">
               Select the bills you want to act on using the checkboxes.
             </p>
           )}
@@ -625,7 +642,7 @@ export default function AssignedBillsPage() {
             title={bills.length === 0 ? "No assigned bills" : "No payments match"}
             description={
               bills.length === 0
-                ? "Bills appear here after a corporate pays and a rule matches this account."
+                ? "Bills appear here once Paytrix assigns them to your account."
                 : "Try another status filter or search query."
             }
           />
@@ -636,24 +653,26 @@ export default function AssignedBillsPage() {
                 columns={
                   showSelect
                     ? [
-                        <input
-                          key="all"
-                          type="checkbox"
-                          aria-label={allPendingSelected ? "Clear selection" : "Select all still with you"}
-                          checked={allPendingSelected}
-                          onChange={() =>
-                            setSelectedIds(allPendingSelected ? new Set() : new Set(pending.map((bill) => bill.id)))
-                          }
-                          className="h-4 w-4 rounded border-slate-300"
-                        />,
+                        selectableVisible.length > 0 ? (
+                          <input
+                            key="all"
+                            type="checkbox"
+                            aria-label={allVisibleSelected ? "Clear selection" : "Select all visible bills"}
+                            checked={allVisibleSelected}
+                            onChange={toggleSelectAll}
+                            className="h-4 w-4 rounded border-slate-300"
+                          />
+                        ) : (
+                          ""
+                        ),
                         "Biller",
-                        "Corporate",
                         "Consumer",
                         "Due date",
                         "Amount",
                         "Status",
+                        "",
                       ]
-                    : ["Biller", "Corporate", "Consumer", "Due date", "Amount", "Status"]
+                    : ["Biller", "Consumer", "Due date", "Amount", "Status", ""]
                 }
               />
               <TBody>
@@ -661,7 +680,7 @@ export default function AssignedBillsPage() {
                   const stage = stageOf(bill);
                   const badge = vendorStageBadge(stage);
                   const expanded = expandedIds.has(bill.id);
-                  const selectable = showSelect && holding(bill);
+                  const selectable = canSelectRow(bill);
                   return (
                     <Fragment key={bill.id}>
                       <TR className="cursor-pointer" onClick={() => toggleExpand(bill.id)}>
@@ -679,21 +698,8 @@ export default function AssignedBillsPage() {
                           </TD>
                         )}
                         <TD>
-                          <div className="flex items-start gap-2">
-                            <span className="mt-0.5 text-slate-400">
-                              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-slate-900">{bill.billerName}</p>
-                              <p className="mt-0.5 text-[11px] font-medium text-slate-400">{bill.billServiceName}</p>
-                            </div>
-                          </div>
-                        </TD>
-                        <TD>
-                          <p className="font-semibold text-slate-900">{bill.corporateName ?? "—"}</p>
-                          {bill.branchName && (
-                            <p className="mt-0.5 text-[11px] font-medium text-slate-400">{bill.branchName}</p>
-                          )}
+                          <p className="font-semibold text-slate-900">{bill.billerName}</p>
+                          <p className="mt-0.5 text-[11px] font-medium text-slate-400">{bill.billServiceName}</p>
                         </TD>
                         <TD onClick={(event) => event.stopPropagation()}>
                           <button
@@ -717,16 +723,14 @@ export default function AssignedBillsPage() {
                         </TD>
                         <TD className="text-xs text-slate-600">{formatWhen(bill.dueDate)}</TD>
                         <TD className="font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</TD>
-                        <TD onClick={(event) => event.stopPropagation()}>
-                          <div className="flex items-center gap-3">
-                            <StatusBadge status={badge.status} label={badge.label} />
-                            <RowAction
-                              stage={stage}
-                              canAct={canAct}
-                              busy={busy}
-                              onProgress={() => setConfirmBill({ kind: "progress", bill })}
-                              onPay={() => setPayBill(bill)}
-                            />
+                        <TD>
+                          <StatusBadge status={badge.status} label={badge.label} />
+                        </TD>
+                        <TD>
+                          <div className="flex items-center justify-end">
+                            <span className="text-slate-300">
+                              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </span>
                           </div>
                         </TD>
                       </TR>
@@ -770,25 +774,6 @@ export default function AssignedBillsPage() {
         loading={busy}
         onCancel={() => setProgressQueue(null)}
         onConfirm={markSelectedInProgress}
-      />
-      <ConfirmAction
-        open={confirmBill != null}
-        title={confirmBill?.kind === "paid" ? "Mark this bill paid?" : "Mark this bill in progress?"}
-        summary={
-          confirmBill?.kind === "paid"
-            ? "The bill goes to Paytrix to verify."
-            : "You can still send the bill back."
-        }
-        details={confirmDetails}
-        confirmLabel={confirmBill?.kind === "paid" ? "Pay" : "Mark in progress"}
-        raised={confirmBill?.kind === "paid"}
-        loading={busy}
-        onCancel={() => setConfirmBill(null)}
-        onConfirm={() => {
-          if (!confirmBill) return;
-          if (confirmBill.kind === "progress") markInProgress(confirmBill.bill.id);
-          else markPaid(confirmBill.bill.id);
-        }}
       />
       <ConfirmAction
         open={sheetPreview != null}
@@ -847,144 +832,165 @@ export default function AssignedBillsPage() {
         onClose={() => {
           if (!busy) setBulkPayOpen(false);
         }}
-        size="xl"
-        title={selectedInProgress.length === 1 ? "Pay this bill" : `Pay ${selectedInProgress.length} bills`}
-        description="Each bill needs its own transaction reference, BBPS reference, and proof."
+        dismissable={false}
+        size={isMultiPay ? "xl" : "md"}
+        title={
+          isMultiPay
+            ? `Mark ${selectedInProgress.length} bills as paid`
+            : "Mark bill as paid"
+        }
+        description={
+          isMultiPay
+            ? `Enter the transaction reference and BBPS reference for each of the ${selectedInProgress.length} selected bills (${inr(selectedInProgress.reduce((sum, b) => sum + b.amount, 0))}).`
+            : "Enter the transaction reference, BBPS reference, and attach proof of payment."
+        }
         footer={
           <>
             <Button variant="outline" disabled={busy} onClick={() => setBulkPayOpen(false)}>
               Cancel
             </Button>
             <Button loading={busy} disabled={!bulkPayReady} onClick={paySelected}>
-              Pay
+              {isMultiPay ? `Mark ${selectedInProgress.length} as Paid` : "Mark as Paid"}
             </Button>
           </>
         }
       >
-        <div className="flex flex-col gap-4">
-          {selectedInProgress.map((bill) => (
-            <div key={bill.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{bill.billerName}</p>
-                <p className="text-xs text-slate-500">
-                  {bill.customerBillAccountNumber} · {inr(bill.amount)}
-                </p>
+        {isMultiPay ? (
+          <div className="flex flex-col">
+            <div className="hidden border-b border-slate-200 pb-2 text-[11px] font-bold tracking-wider text-slate-400 uppercase md:grid md:grid-cols-2 md:gap-4">
+              <span>Bill Details</span>
+              <div className="grid grid-cols-2 gap-2">
+                <span>Transaction Ref. *</span>
+                <span>BBPS Ref. *</span>
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {selectedInProgress.map((bill, index) => (
+                <div
+                  key={bill.id}
+                  className="grid grid-cols-1 items-center gap-2.5 py-2.5 md:grid-cols-2 md:gap-4"
+                >
+                  <div className="flex min-w-0 items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold text-slate-900">
+                        <span className="mr-1.5 font-mono text-[11px] text-slate-400">
+                          #{index + 1}
+                        </span>
+                        {bill.billerName}
+                      </p>
+                      <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                        <span className="font-mono font-medium text-slate-700">
+                          {bill.customerBillAccountNumber}
+                        </span>
+                        {bill.billServiceName ? ` · ${bill.billServiceName}` : ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-xs font-semibold text-slate-900">
+                      {inr(bill.amount)}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      required
+                      maxLength={120}
+                      disabled={busy}
+                      placeholder="Transaction ref. *"
+                      aria-label={`Transaction reference for ${bill.customerBillAccountNumber}`}
+                      value={references[bill.id] ?? ""}
+                      onChange={(event) =>
+                        setReferences((current) => ({
+                          ...current,
+                          [bill.id]: event.target.value,
+                        }))
+                      }
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+                    />
+                    <input
+                      type="text"
+                      required
+                      maxLength={120}
+                      disabled={busy}
+                      placeholder="BBPS ref. *"
+                      aria-label={`BBPS reference for ${bill.customerBillAccountNumber}`}
+                      value={bbpsReferences[bill.id] ?? ""}
+                      onChange={(event) =>
+                        setBbpsReferences((current) => ({
+                          ...current,
+                          [bill.id]: event.target.value,
+                        }))
+                      }
+                      className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 font-mono text-xs text-slate-900 outline-none placeholder:font-sans placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-50"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          selectedInProgress[0] && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">
+                    {selectedInProgress[0].billerName}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    <span className="font-mono">{selectedInProgress[0].customerBillAccountNumber}</span>
+                    {selectedInProgress[0].billServiceName
+                      ? ` · ${selectedInProgress[0].billServiceName}`
+                      : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 font-mono text-sm font-semibold text-slate-900">
+                  {inr(selectedInProgress[0].amount)}
+                </span>
               </div>
               <Field
                 label="Transaction reference number"
                 required
                 maxLength={120}
-                value={references[bill.id] ?? ""}
-                onChange={(event) => setReferences((current) => ({ ...current, [bill.id]: event.target.value }))}
+                value={references[selectedInProgress[0].id] ?? ""}
+                onChange={(event) =>
+                  setReferences((current) => ({
+                    ...current,
+                    [selectedInProgress[0].id]: event.target.value,
+                  }))
+                }
               />
               <Field
                 label="BBPS reference"
                 required
                 maxLength={120}
-                value={bbpsReferences[bill.id] ?? ""}
-                onChange={(event) => setBbpsReferences((current) => ({ ...current, [bill.id]: event.target.value }))}
+                value={bbpsReferences[selectedInProgress[0].id] ?? ""}
+                onChange={(event) =>
+                  setBbpsReferences((current) => ({
+                    ...current,
+                    [selectedInProgress[0].id]: event.target.value,
+                  }))
+                }
               />
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-xs font-semibold text-slate-700">Proof of payment</span>
+                <span className="text-xs font-semibold text-slate-700">
+                  Proof of payment <span className="text-rose-500">*</span>
+                </span>
                 <input
                   type="file"
                   required
                   accept="application/pdf,image/png,image/jpeg,image/webp"
                   onChange={(event) => {
                     const file = event.target.files?.[0];
-                    setProofs((current) => ({ ...current, [bill.id]: file }));
+                    setProofs((current) => ({ ...current, [selectedInProgress[0].id]: file }));
                   }}
                   className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
                 />
               </label>
             </div>
-          ))}
-        </div>
-      </Modal>
-      <Modal
-        open={payBill != null}
-        onClose={() => setPayBill(null)}
-        title="Pay this bill"
-        description={payBill ? `${payBill.billerName} · ${payBill.customerBillAccountNumber}` : undefined}
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setPayBill(null)} disabled={busy}>
-              Cancel
-            </Button>
-            <Button
-              loading={busy}
-              onClick={() => {
-                if (!payBill) return;
-                if (!(references[payBill.id] ?? "").trim() || !(bbpsReferences[payBill.id] ?? "").trim()) {
-                  toast.error("Enter the transaction reference and the BBPS reference");
-                  return;
-                }
-                if (!proofs[payBill.id]) {
-                  toast.error("Attach the proof of payment");
-                  return;
-                }
-                setConfirmBill({ kind: "paid", bill: payBill });
-              }}
-            >
-              Pay
-            </Button>
-          </>
-        }
-      >
-        {payBill && (
-          <div className="flex flex-col gap-3">
-            <Field
-              label="Transaction reference number"
-              required
-              maxLength={120}
-              value={references[payBill.id] ?? ""}
-              onChange={(event) => setReferences((current) => ({ ...current, [payBill.id]: event.target.value }))}
-            />
-            <Field
-              label="BBPS reference"
-              required
-              maxLength={120}
-              value={bbpsReferences[payBill.id] ?? ""}
-              onChange={(event) => setBbpsReferences((current) => ({ ...current, [payBill.id]: event.target.value }))}
-            />
-            <label className="flex min-w-0 flex-col gap-1.5">
-              <span className="text-xs font-semibold text-slate-700">Proof of payment</span>
-              <input
-                type="file"
-                required
-                accept="application/pdf,image/png,image/jpeg,image/webp"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  setProofs((current) => ({ ...current, [payBill.id]: file }));
-                }}
-                className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
-              />
-            </label>
-          </div>
+          )
         )}
       </Modal>
     </div>
-  );
-}
-
-function RowAction({
-  stage,
-  canAct,
-  busy,
-  onProgress,
-  onPay,
-}: {
-  stage: VendorStage;
-  canAct: boolean;
-  busy: boolean;
-  onProgress: () => void;
-  onPay: () => void;
-}) {
-  if (!canAct || (stage !== "ASSIGNED" && stage !== "IN_PROGRESS")) return null;
-  return (
-    <Button type="button" size="sm" disabled={busy} onClick={stage === "ASSIGNED" ? onProgress : onPay}>
-      {stage === "ASSIGNED" ? "Mark in progress" : "Pay"}
-    </Button>
   );
 }
 
@@ -995,7 +1001,6 @@ function BillDetail({ bill, stage }: { bill: BillPayment; stage: VendorStage }) 
         <DetailField label="Due" value={formatWhen(bill.dueDate)} />
         <DetailField label="Cycle" value={bill.billPeriod ?? "—"} />
         <DetailField label="Customer" value={bill.customerName ?? "—"} />
-        <DetailField label="Branch" value={bill.branchName ?? "—"} />
         <DetailField label="Transaction ref." value={bill.vendorPaymentReference ?? "—"} mono />
         <DetailField label="BBPS ref." value={bill.bbpsTransactionId ?? "—"} mono />
         <DetailField label="Paid to biller" value={formatWhen(bill.vendorMarkedPaidAt)} />

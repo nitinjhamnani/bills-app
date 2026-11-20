@@ -19,7 +19,6 @@ const columns: ReportColumn<VendorAwaitingRow>[] = [
     exportValue: (row) => row.billId,
   },
   { key: "category", label: "Category", render: (row) => row.category, exportValue: (row) => row.category },
-  { key: "corporate", label: "Corporate", render: (row) => row.corporateName ?? "—", exportValue: (row) => row.corporateName ?? "" },
   { key: "amount", label: "Amount", render: (row) => formatInr(row.amount), exportValue: (row) => row.amount },
   { key: "paidOn", label: "Paid on", render: (row) => formatIstDateTime(row.paidOn), exportValue: (row) => row.paidOn ?? "" },
 ];

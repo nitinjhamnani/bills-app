@@ -118,7 +118,7 @@ export default function VendorDashboardPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
-        description="Bills a corporate pays are assigned to you. Follow them on Bill Payments until Paytrix verifies them. Verified bills also appear under Transactions."
+        description="Bills Paytrix assigns to you appear under Bill Payments. Verified settlements also appear under Transactions."
         actions={user?.role ? <StatusBadge status={user.role} /> : undefined}
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -145,16 +145,16 @@ export default function VendorDashboardPage() {
           </Button>
         </div>
         {loading ? (
-          <TableSkeleton cols={6} rows={4} />
+          <TableSkeleton cols={5} rows={4} />
         ) : bills.length === 0 ? (
           <EmptyState
             icon={FileText}
             title="No assigned bills yet"
-            description="Bills appear here after a corporate pays and a commission rule matches this vendor account."
+            description="Bills appear here once Paytrix assigns them to your vendor account."
           />
         ) : (
           <Table>
-            <THead columns={["Biller", "Corporate", "Consumer", "Amount", "Status", ""]} />
+            <THead columns={["Biller", "Consumer", "Amount", "Status", ""]} />
             <TBody>
               {bills.slice(0, 8).map((bill) => {
                 const stage = vendorStageBadge(vendorStage(bill));
@@ -170,7 +170,6 @@ export default function VendorDashboardPage() {
                         {bill.billServiceName}
                       </p>
                     </TD>
-                    <TD className="font-medium text-slate-700">{bill.corporateName ?? "—"}</TD>
                     <TD>
                       <p className="font-mono text-xs font-semibold text-slate-800">
                         {bill.customerBillAccountNumber}

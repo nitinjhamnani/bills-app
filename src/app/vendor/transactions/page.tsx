@@ -105,7 +105,6 @@ export default function VendorTransactionsPage() {
       (row) =>
         (row.billerName ?? "").toLowerCase().includes(query) ||
         (row.consumerNumber ?? "").toLowerCase().includes(query) ||
-        (row.corporateName ?? "").toLowerCase().includes(query) ||
         (row.paymentReference ?? "").toLowerCase().includes(query) ||
         (row.commissionReference ?? "").toLowerCase().includes(query),
     );
@@ -230,14 +229,14 @@ export default function VendorTransactionsPage() {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search by biller, consumer no., corporate, or reference"
+              placeholder="Search by biller, consumer no., or reference"
               className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
         </div>
 
         {loading ? (
-          <TableSkeleton cols={6} />
+          <TableSkeleton cols={5} />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={ArrowLeftRight}
@@ -254,7 +253,6 @@ export default function VendorTransactionsPage() {
               <THead
                 columns={[
                   "Biller",
-                  "Corporate",
                   "Consumer",
                   "Bill amount",
                   "Paytrix reimbursement",
@@ -270,7 +268,6 @@ export default function VendorTransactionsPage() {
                         Paid to biller {when(row.billPaidOn)}
                       </p>
                     </TD>
-                    <TD className="font-medium text-slate-800">{row.corporateName ?? "—"}</TD>
                     <TD>
                       {row.consumerNumber ? (
                         <button
