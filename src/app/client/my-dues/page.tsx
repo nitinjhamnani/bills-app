@@ -1,11 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  ChevronDown,
-  ChevronRight,
+  Check,
+  Copy,
   FileText,
+  Search,
   Send,
   SlidersHorizontal,
   Wallet,
@@ -13,30 +15,43 @@ import {
 } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { getUser } from "@/lib/auth";
-import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, SelectField } from "@/components/ui/Field";
-import { CopyableChip } from "@/components/ui/CopyableChip";
-import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
+import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
 import type { BillPayment, WalletBalance } from "@/lib/types";
 
-function formatWhen(iso: string | null) {
+function formatWhen(iso: string | null | undefined) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
 }
 
-function formatMaybeDate(value: string | null) {
+function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatMaybeDate(value: string | null | undefined) {
   if (!value) return "—";
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return formatWhen(value);
   return value;
@@ -48,17 +63,23 @@ function inr(amount: number) {
 
 export default function ClientMyDuesPage() {
   const toast = useToast();
+  const router = useRouter();
   const user = getUser();
   const clientId = user?.clientId ?? "";
   const role = user?.role;
   const canPay = role === "CORP_ADMIN" || role === "CORP_OPERATOR";
   const showBranch = role === "CORP_ADMIN" || role === "CORP_OPERATOR";
+
   const [payments, setPayments] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
 
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [confirmIds, setConfirmIds] = useState<string[] | null>(null);
   const [confirming, setConfirming] = useState(false);
 
@@ -68,6 +89,17 @@ export default function ClientMyDuesPage() {
   const [billerName, setBillerName] = useState("ALL");
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
+
+  async function copyText(key: string, text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      toast.success(`Copied ${text}`);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      toast.error(`Could not copy ${label}`);
+    }
+  }
 
   async function load() {
     if (!clientId) {
@@ -92,7 +124,7 @@ export default function ClientMyDuesPage() {
       );
       setWalletBalance(balance);
     } catch {
-      // The confirm dialog still works; it just cannot preview the balance.
+      // Confirm dialog still works even if balance preview cannot be loaded.
     }
   }
 
@@ -109,6 +141,7 @@ export default function ClientMyDuesPage() {
     for (const payment of payments) map.set(payment.billServiceCode, payment.billServiceName);
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [payments]);
+
   const billerOptions = useMemo(() => {
     const set = new Set<string>();
     for (const payment of payments) set.add(payment.billerName);
@@ -117,17 +150,43 @@ export default function ClientMyDuesPage() {
 
   const visible = useMemo(() => {
     let result = payments;
-    if (billerCategory !== "ALL") result = result.filter((payment) => payment.billServiceCode === billerCategory);
-    if (billerName !== "ALL") result = result.filter((payment) => payment.billerName === billerName);
+    if (billerCategory !== "ALL") {
+      result = result.filter((payment) => payment.billServiceCode === billerCategory);
+    }
+    if (billerName !== "ALL") {
+      result = result.filter((payment) => payment.billerName === billerName);
+    }
     if (consumerNumber.trim()) {
       const query = consumerNumber.trim().toLowerCase();
-      result = result.filter((payment) => payment.customerBillAccountNumber.toLowerCase().includes(query));
+      result = result.filter((payment) =>
+        payment.customerBillAccountNumber.toLowerCase().includes(query),
+      );
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter(
+        (payment) =>
+          payment.billId.toLowerCase().includes(q) ||
+          (payment.branchName ?? "").toLowerCase().includes(q) ||
+          payment.billerName.toLowerCase().includes(q) ||
+          payment.billServiceName.toLowerCase().includes(q) ||
+          payment.customerBillAccountNumber.toLowerCase().includes(q) ||
+          (payment.customerName ?? "").toLowerCase().includes(q),
+      );
     }
     result = result.filter((payment) => matchesAmount(payment.amount, amountMin, amountMax));
     return [...result].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-  }, [payments, billerCategory, billerName, consumerNumber, amountMin, amountMax]);
+  }, [payments, billerCategory, billerName, consumerNumber, search, amountMin, amountMax]);
+
+  const totalDueAmount = useMemo(
+    () => visible.reduce((sum, payment) => sum + (payment.amount ?? 0), 0),
+    [visible],
+  );
+
+  const totalPages = Math.ceil(visible.length / pageSize);
+  const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const amountRangeActive = Boolean(amountMin.trim() || amountMax.trim());
   const activeFilterCount = [
@@ -137,7 +196,8 @@ export default function ClientMyDuesPage() {
     amountRangeActive,
   ].filter(Boolean).length;
 
-  const allVisibleSelected = visible.length > 0 && visible.every((payment) => selectedIds.has(payment.id));
+  const allVisibleSelected =
+    visible.length > 0 && visible.every((payment) => selectedIds.has(payment.id));
   const selectedTotal = useMemo(
     () =>
       payments
@@ -152,15 +212,7 @@ export default function ClientMyDuesPage() {
     setConsumerNumber("");
     setAmountMin("");
     setAmountMax("");
-  }
-
-  function toggleExpand(id: string) {
-    setExpandedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setCurrentPage(1);
   }
 
   function toggleSelect(id: string) {
@@ -174,13 +226,11 @@ export default function ClientMyDuesPage() {
 
   function toggleSelectAll() {
     setSelectedIds((prev) => {
-      if (visible.length > 0 && visible.every((payment) => prev.has(payment.id))) return new Set();
+      if (visible.length > 0 && visible.every((payment) => prev.has(payment.id))) {
+        return new Set();
+      }
       return new Set(visible.map((payment) => payment.id));
     });
-  }
-
-  function requestPayOne(id: string) {
-    setConfirmIds([id]);
   }
 
   function requestPayBulk() {
@@ -230,12 +280,12 @@ export default function ClientMyDuesPage() {
   const categoryLabel = categoryOptions.find(([code]) => code === billerCategory)?.[1];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Bill Dues"
         description={
           canPay
-            ? "Bills that are due. Pay one, or select several and pay them together."
+            ? "Bills that are due. Select one or more bills to pay them from the corporate wallet."
             : "Bills due for your branches. Payment is made from the corporate wallet."
         }
         actions={
@@ -254,17 +304,25 @@ export default function ClientMyDuesPage() {
         }
       />
 
-      <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl bg-slate-100 px-3 py-2">
-        <span className="text-xs font-semibold text-slate-700">
-          Due
-          <span className="ml-2 rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
-            {visible.length}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-100 px-3.5 py-2.5">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold text-slate-700">
+            Due bills
+            <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+              {visible.length}
+            </span>
           </span>
-        </span>
+          <span className="font-mono text-xs font-semibold text-slate-700">
+            Total due: <span className="text-slate-900">{inr(totalDueAmount)}</span>
+          </span>
+        </div>
         {canPay && (
-          <span className="flex items-center gap-2 text-xs font-medium text-slate-500">
-            <Wallet size={14} />
-            {walletBalance != null ? inr(walletBalance) : "—"}
+          <span className="flex items-center gap-2 text-xs font-medium text-slate-600">
+            <Wallet size={14} className="text-slate-400" />
+            Wallet:{" "}
+            <span className="font-mono font-semibold text-slate-900">
+              {walletBalance != null ? inr(walletBalance) : "—"}
+            </span>
           </span>
         )}
       </div>
@@ -272,13 +330,31 @@ export default function ClientMyDuesPage() {
       {activeFilterCount > 0 && (
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {consumerNumber.trim() && (
-            <FilterChip label={consumerNumber.trim()} onClear={() => setConsumerNumber("")} />
+            <FilterChip
+              label={consumerNumber.trim()}
+              onClear={() => {
+                setConsumerNumber("");
+                setCurrentPage(1);
+              }}
+            />
           )}
           {billerCategory !== "ALL" && (
-            <FilterChip label={categoryLabel ?? billerCategory} onClear={() => setBillerCategory("ALL")} />
+            <FilterChip
+              label={categoryLabel ?? billerCategory}
+              onClear={() => {
+                setBillerCategory("ALL");
+                setCurrentPage(1);
+              }}
+            />
           )}
           {billerName !== "ALL" && (
-            <FilterChip label={billerName} onClear={() => setBillerName("ALL")} />
+            <FilterChip
+              label={billerName}
+              onClear={() => {
+                setBillerName("ALL");
+                setCurrentPage(1);
+              }}
+            />
           )}
           {amountRangeActive && (
             <FilterChip
@@ -286,6 +362,7 @@ export default function ClientMyDuesPage() {
               onClear={() => {
                 setAmountMin("");
                 setAmountMax("");
+                setCurrentPage(1);
               }}
             />
           )}
@@ -300,6 +377,30 @@ export default function ClientMyDuesPage() {
       )}
 
       <ListCard fitContent={false}>
+        <div className="flex shrink-0 flex-col gap-2.5 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative sm:w-80">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search branch, biller, or consumer no."
+              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+          {canPay && (
+            <p className="text-xs font-bold text-blue-600">
+              Select the bills you want to pay using the checkboxes.
+            </p>
+          )}
+        </div>
+
         {canPay && selectedIds.size > 0 && (
           <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-indigo-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-semibold text-slate-800">
@@ -318,208 +419,133 @@ export default function ClientMyDuesPage() {
         )}
 
         {loading ? (
-          <TableSkeleton cols={showBranch ? 7 : 6} />
+          <TableSkeleton cols={showBranch ? 6 : 5} />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={FileText}
-            title={payments.length === 0 ? "Nothing due" : "No dues match"}
+            title={payments.length === 0 ? "No bill dues" : "No bill dues match"}
             description={
               payments.length === 0
                 ? "Bills show up here once a managed bill is fetched and due."
-                : "Try another biller or clear the filters."
+                : "Try another filter or clear the search."
+            }
+            action={
+              payments.length > 0 ? (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    resetFilters();
+                    setSearch("");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : undefined
             }
           />
         ) : (
           <>
-            <div className="hidden min-h-0 flex-1 flex-col md:flex">
-              <Table>
-                <THead
-                  columns={[
-                    ...(canPay
-                      ? [
-                          <input
-                            key="select-all"
-                            type="checkbox"
-                            aria-label="Select all visible payments"
-                            checked={allVisibleSelected}
-                            onChange={toggleSelectAll}
-                            className="h-4 w-4 rounded border-slate-300"
-                          />,
-                        ]
-                      : []),
-                    "Biller",
-                    ...(showBranch ? ["Branch"] : []),
-                    "Consumer no.",
-                    "Amount",
-                    "Status",
-                    "Due",
-                    ...(canPay ? [""] : []),
-                  ]}
-                />
-                <TBody>
-                  {visible.map((payment) => {
-                    const expanded = expandedIds.has(payment.id);
-                    return (
-                      <Fragment key={payment.id}>
-                        <TR className="cursor-pointer" onClick={() => toggleExpand(payment.id)}>
-                          {canPay && (
-                          <TD onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="checkbox"
-                              aria-label={`Select ${payment.billerName}`}
-                              checked={selectedIds.has(payment.id)}
-                              onChange={() => toggleSelect(payment.id)}
-                              className="h-4 w-4 rounded border-slate-300"
-                            />
-                          </TD>
-                          )}
-                          <TD>
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 text-slate-400">
-                                {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="font-semibold text-slate-900">{payment.billerName}</p>
-                                <p className="text-[11px] font-medium text-slate-400">
-                                  {payment.billServiceName}
-                                </p>
-                                {!showBranch && payment.branchName && (
-                                  <p className="text-[11px] font-medium text-slate-500">{payment.branchName}</p>
-                                )}
-                              </div>
-                            </div>
-                          </TD>
-                          {showBranch && (
-                            <TD className="text-slate-700">{payment.branchName ?? "—"}</TD>
-                          )}
-                          <TD>
-                            <CopyableChip text={payment.customerBillAccountNumber} label="consumer number" />
-                          </TD>
-                          <TD className="font-mono text-sm font-semibold text-slate-900">
-                            {inr(payment.amount)}
-                          </TD>
-                          <TD>
-                            <StatusBadge status={payment.paymentStatus} />
-                          </TD>
-                          <TD className="text-slate-500">{formatMaybeDate(payment.dueDate)}</TD>
-                          {canPay && (
-                          <TD onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              size="sm"
-                              icon={<Send size={14} />}
-                              onClick={() => requestPayOne(payment.id)}
-                            >
-                              Pay
-                            </Button>
-                          </TD>
-                          )}
-                        </TR>
-                        {expanded && (
-                          <TR className="hover:bg-transparent">
-                            <TD colSpan={(canPay ? 7 : 5) + (showBranch ? 1 : 0)} className="bg-slate-50 px-4 py-3 whitespace-normal!">
-                              <PaymentDetail payment={payment} />
-                            </TD>
-                          </TR>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </TBody>
-              </Table>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto p-3 md:hidden">
-              <div className="mb-2 flex items-center justify-between px-1">
-                {canPay ? (
-                <button
-                  type="button"
-                  onClick={toggleSelectAll}
-                  className="min-h-11 text-xs font-semibold text-indigo-700"
-                >
-                  {allVisibleSelected ? "Clear selection" : "Select all"}
-                </button>
-                ) : (
-                  <span />
-                )}
-                <span className="text-xs text-slate-500">{visible.length} bills</span>
-              </div>
-              <ul className="flex flex-col gap-3">
-                {visible.map((payment) => {
-                  const expanded = expandedIds.has(payment.id);
-                  return (
-                    <li
-                      key={payment.id}
-                      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[var(--shadow-card)]"
-                    >
-                      <div className="flex items-start gap-3 p-4">
-                        {canPay && (
+            <Table>
+              <THead
+                columns={[
+                  ...(canPay
+                    ? [
+                        <input
+                          key="select-all"
+                          type="checkbox"
+                          aria-label="Select all visible dues"
+                          checked={allVisibleSelected}
+                          onChange={toggleSelectAll}
+                          className="h-4 w-4 rounded border-slate-300"
+                        />,
+                      ]
+                    : []),
+                  ...(showBranch ? ["Branch"] : []),
+                  "Biller",
+                  "Consumer",
+                  "Amount",
+                  "Due date",
+                  "Last fetch",
+                ]}
+              />
+              <TBody>
+                {paged.map((payment) => (
+                  <TR
+                    key={payment.id}
+                    className="cursor-pointer"
+                    onClick={() => router.push(`/client/managed-bills/${payment.billId}`)}
+                  >
+                    {canPay && (
+                      <TD onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           aria-label={`Select ${payment.billerName}`}
                           checked={selectedIds.has(payment.id)}
                           onChange={() => toggleSelect(payment.id)}
-                          className="mt-1 h-5 w-5 rounded border-slate-300"
+                          className="h-4 w-4 rounded border-slate-300"
                         />
+                      </TD>
+                    )}
+                    {showBranch && (
+                      <TD className="font-medium text-slate-800">
+                        {payment.branchName ?? "—"}
+                      </TD>
+                    )}
+                    <TD>
+                      <p className="font-semibold text-slate-900">{payment.billerName}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                        {payment.billServiceName}
+                      </p>
+                    </TD>
+                    <TD onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        title="Copy consumer ID"
+                        onClick={() =>
+                          void copyText(
+                            `consumer:${payment.id}`,
+                            payment.customerBillAccountNumber,
+                            "consumer ID",
+                          )
+                        }
+                        className="group -ml-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                      >
+                        <span>{payment.customerBillAccountNumber}</span>
+                        {copiedKey === `consumer:${payment.id}` ? (
+                          <Check size={12} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
                         )}
-                        <div className="min-w-0 flex-1">
-                          <button
-                            type="button"
-                            onClick={() => toggleExpand(payment.id)}
-                            className="w-full text-left"
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-slate-900">
-                                  {payment.billerName}
-                                </p>
-                                <p className="text-xs text-slate-500">{payment.billServiceName}</p>
-                                {showBranch && (
-                                  <p className="text-xs font-medium text-slate-600">
-                                    {payment.branchName ?? "—"}
-                                  </p>
-                                )}
-                              </div>
-                              <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
-                                {inr(payment.amount)}
-                              </p>
-                            </div>
-                            <div className="mt-3">
-                              <StatusBadge status={payment.paymentStatus} />
-                            </div>
-                            <p className="mt-2 text-xs text-slate-500">
-                              Due {formatMaybeDate(payment.dueDate)}
-                            </p>
-                          </button>
-                          <div className="mt-2">
-                            <CopyableChip
-                              text={payment.customerBillAccountNumber}
-                              label="consumer number"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      {expanded && (
-                        <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
-                          <PaymentDetail payment={payment} />
-                        </div>
-                      )}
-                      {canPay && (
-                      <div className="border-t border-slate-100 px-4 py-3">
-                        <Button
-                          size="sm"
-                          className="w-full"
-                          icon={<Send size={14} />}
-                          onClick={() => requestPayOne(payment.id)}
-                        >
-                          Pay
-                        </Button>
-                      </div>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+                      </button>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                        {payment.customerName || "—"}
+                      </p>
+                    </TD>
+                    <TD className="font-mono text-sm font-semibold text-slate-900">
+                      {inr(payment.amount)}
+                    </TD>
+                    <TD className="text-xs font-medium text-slate-700">
+                      {formatMaybeDate(payment.dueDate)}
+                    </TD>
+                    <TD className="text-xs text-slate-500">
+                      {formatDateTime(payment.createdAt)}
+                    </TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={visible.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
           </>
         )}
       </ListCard>
@@ -627,8 +653,8 @@ export default function ClientMyDuesPage() {
       <Modal
         open={filterModalOpen}
         onClose={() => setFilterModalOpen(false)}
-        title="Filter dues"
-        description="These apply to the bills waiting for payment."
+        title="Filter bill dues"
+        description="Narrow the list by consumer number, category, biller, or amount."
         footer={
           <>
             <Button variant="outline" onClick={resetFilters}>
@@ -642,13 +668,19 @@ export default function ClientMyDuesPage() {
           <Field
             label="Consumer number"
             value={consumerNumber}
-            onChange={(e) => setConsumerNumber(e.target.value)}
+            onChange={(e) => {
+              setConsumerNumber(e.target.value);
+              setCurrentPage(1);
+            }}
             placeholder="e.g. 100234567"
           />
           <SelectField
             label="Biller category"
             value={billerCategory}
-            onChange={(e) => setBillerCategory(e.target.value)}
+            onChange={(e) => {
+              setBillerCategory(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="ALL">All</option>
             {categoryOptions.map(([code, name]) => (
@@ -660,7 +692,10 @@ export default function ClientMyDuesPage() {
           <SelectField
             label="Biller name"
             value={billerName}
-            onChange={(e) => setBillerName(e.target.value)}
+            onChange={(e) => {
+              setBillerName(e.target.value);
+              setCurrentPage(1);
+            }}
           >
             <option value="ALL">All</option>
             {billerOptions.map((name) => (
@@ -676,7 +711,10 @@ export default function ClientMyDuesPage() {
               min={0}
               step="0.01"
               value={amountMin}
-              onChange={(e) => setAmountMin(e.target.value)}
+              onChange={(e) => {
+                setAmountMin(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="0"
             />
             <Field
@@ -685,70 +723,15 @@ export default function ClientMyDuesPage() {
               min={0}
               step="0.01"
               value={amountMax}
-              onChange={(e) => setAmountMax(e.target.value)}
-              placeholder="Any"
+              onChange={(e) => {
+                setAmountMax(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="No limit"
             />
           </div>
         </div>
       </Modal>
-    </div>
-  );
-}
-
-function PaymentDetail({ payment }: { payment: BillPayment }) {
-  const lines =
-    payment.amountBreakdown.length > 0
-      ? payment.amountBreakdown
-      : [{ label: "Bill amount", amount: payment.amount }];
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-8">
-        <section>
-          <h3 className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Amount</h3>
-          <dl className="mt-3 flex flex-col gap-1.5">
-            {lines.map((line) => (
-              <div key={line.label} className="flex items-baseline justify-between gap-4 text-xs">
-                <dt className="text-slate-500">{line.label}</dt>
-                <dd className="font-mono font-medium text-slate-800">{inr(line.amount)}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="mt-3 flex items-baseline justify-between gap-4 border-t border-slate-200 pt-3">
-            <span className="text-xs font-semibold text-slate-700">Total</span>
-            <span className="font-mono text-sm font-semibold text-slate-900">{inr(payment.amount)}</span>
-          </div>
-        </section>
-
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">
-          <DetailField label="Customer" value={payment.customerName ?? "—"} />
-          <DetailField label="Mobile" value={payment.customerMobileNumber ?? "—"} mono />
-          <DetailField label="Category" value={payment.billServiceName} />
-          <DetailField label="Bill no." value={payment.billNumber ?? "—"} mono />
-          <DetailField label="Period" value={payment.billPeriod ?? "—"} />
-          <DetailField label="Bill date" value={formatMaybeDate(payment.billDate)} />
-          <DetailField label="Due" value={formatMaybeDate(payment.dueDate)} />
-        </dl>
-      </div>
-    </div>
-  );
-}
-
-function DetailField({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="min-w-0">
-      <dt className="text-[11px] font-medium text-slate-400">{label}</dt>
-      <dd className={cn("mt-1 truncate text-sm text-slate-900", mono ? "font-mono font-medium" : "font-medium")}>
-        {value}
-      </dd>
     </div>
   );
 }
@@ -765,26 +748,26 @@ function matchesAmount(amount: number | null | undefined, min: string, max: stri
   return true;
 }
 
-function amountRangeLabel(min: string, max: string) {
-  const minN = min.trim() === "" ? null : Number(min);
-  const maxN = max.trim() === "" ? null : Number(max);
-  const hasMin = minN != null && Number.isFinite(minN);
-  const hasMax = maxN != null && Number.isFinite(maxN);
-  if (hasMin && hasMax) return `${inr(minN)} – ${inr(maxN)}`;
-  if (hasMin) return `From ${inr(minN)}`;
-  if (hasMax) return `Up to ${inr(maxN)}`;
-  return "Amount";
+function amountRangeLabel(minRaw: string, maxRaw: string) {
+  const min = minRaw.trim();
+  const max = maxRaw.trim();
+  if (min && max) return `₹${min} – ₹${max}`;
+  if (min) return `≥ ₹${min}`;
+  return `≤ ₹${max}`;
 }
 
 function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClear}
-      className="inline-flex min-h-11 items-center gap-1.5 rounded-full bg-white px-3 text-xs font-semibold text-slate-700 ring-1 ring-slate-200"
-    >
-      {label}
-      <X size={12} className="text-slate-400" />
-    </button>
+    <span className="inline-flex min-h-11 items-center gap-1 rounded-full border border-slate-200 bg-white pr-1 pl-3 text-xs font-medium text-slate-700">
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove ${label} filter`}
+        className="flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+      >
+        <X size={13} />
+      </button>
+    </span>
   );
 }

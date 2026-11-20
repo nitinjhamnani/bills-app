@@ -147,7 +147,13 @@ export function AppShell({
                     <Link
                       href={link.href}
                       onClick={() => setMobileOpen(false)}
-                      title={collapsed ? link.label : undefined}
+                      title={
+                        collapsed
+                          ? badge > 0
+                            ? `${link.label} (${badge})`
+                            : link.label
+                          : undefined
+                      }
                       className={cn(
                         "relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150",
                         active
@@ -169,7 +175,7 @@ export function AppShell({
                         <span className="min-w-0 flex-1 truncate tracking-wide">{link.label}</span>
                       )}
                       {!collapsed && badge > 0 && (
-                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold text-white">
+                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold tabular-nums text-white">
                           {badge > 99 ? "99+" : badge}
                         </span>
                       )}

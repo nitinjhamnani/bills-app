@@ -17,6 +17,7 @@ import {
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
 import { ClientSupportFab } from "@/components/support/ClientSupportFab";
+import { useNavCounts, type CorporateNavCounts } from "@/lib/nav-counts";
 import { useSupportUnreadCount } from "@/lib/support-unread";
 import { apiFetch } from "@/lib/api-client";
 import type { ClientAccount, Role, UserProfile } from "@/lib/types";
@@ -60,6 +61,9 @@ function ClientShell({
   }, [user.userId]);
 
   const pending = account?.status === "PENDING";
+  const navCounts = useNavCounts<CorporateNavCounts>(
+    user.clientId && account && !pending ? `/api/v1/clients/${user.clientId}/nav-counts` : null,
+  );
   useEffect(() => {
     const allowedWhilePending = pathname === "/client/dashboard" || pathname === "/client/onboarding/esign";
     if (pending && user.role !== "BRANCH_USER" && !allowedWhilePending) {
@@ -71,13 +75,24 @@ function ClientShell({
     if (branchBlocked) router.replace("/client/dashboard");
   }, [branchBlocked, router]);
 
+  const badgeByHref: Record<string, number | undefined> = {
+    "/client/my-payments": navCounts?.billPayments,
+    "/client/my-dues": navCounts?.billDues,
+    "/client/wallet": navCounts?.walletTopups,
+    "/client/support": unread,
+  };
+
   const links =
     account == null || pending
       ? [{ href: "/client/dashboard", label: "Dashboard", icon: LayoutDashboard }]
       : CORPORATE_NAV;
   const nav = links
     .filter((item) => !item.roles || item.roles.includes(user.role))
-    .map((item) => (item.href === "/client/support" ? { ...item, badge: unread } : item));
+    .map((item) =>
+      badgeByHref[item.href] !== undefined
+        ? { ...item, badge: badgeByHref[item.href] }
+        : item,
+    );
 
   return (
     <>

@@ -187,10 +187,11 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
   }
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "PENDING" | "SUSPENDED">("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const filteredClients = clients.filter((c) => {
+  const searchedClients = clients.filter((c) => {
     const query = search.trim().toLowerCase();
     if (!query) return true;
     return (
@@ -202,7 +203,20 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
     );
   });
 
-  const totalPages = Math.ceil(filteredClients.length / pageSize);
+  const counts = {
+    ALL: searchedClients.length,
+    ACTIVE: searchedClients.filter((c) => c.status === "ACTIVE").length,
+    PENDING: searchedClients.filter((c) => c.status === "PENDING").length,
+    SUSPENDED: searchedClients.filter((c) => c.status === "SUSPENDED" || c.status === "TERMINATED").length,
+  };
+
+  const filteredClients = searchedClients.filter((c) => {
+    if (statusFilter === "ALL") return true;
+    if (statusFilter === "SUSPENDED") return c.status === "SUSPENDED" || c.status === "TERMINATED";
+    return c.status === statusFilter;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / pageSize));
   const pagedClients = filteredClients.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
@@ -210,6 +224,13 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
   const corporate = clientType === "CORPORATE";
   const title = corporate ? "Corporates" : "Vendors";
   const onboardLabel = corporate ? "Onboard corporate" : "Onboard vendor";
+
+  const STATUS_TABS = [
+    { key: "ALL" as const, label: "All" },
+    { key: "ACTIVE" as const, label: "Active" },
+    { key: "PENDING" as const, label: "Onboarding" },
+    { key: "SUSPENDED" as const, label: "Suspended" },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -220,18 +241,41 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
             ? "Companies that pay utility bills through Paytrix."
             : "Companies that settle bills for Paytrix."
         }
-        actions={
-          isAdmin ? (
-            <Button icon={<Plus size={16} />} onClick={() => setModalOpen(true)}>
-              {onboardLabel}
-            </Button>
-          ) : undefined
-        }
       />
 
+      <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {STATUS_TABS.map((item) => {
+          const active = statusFilter === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setStatusFilter(item.key);
+                setCurrentPage(1);
+              }}
+              className={cn(
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors",
+                active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              {item.label}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
+                )}
+              >
+                {counts[item.key]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <ListCard fitContent={false}>
-        <div className="shrink-0 border-b border-slate-100 px-4 py-3">
-          <div className="relative sm:max-w-sm">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 sm:max-w-sm">
             <Search
               size={16}
               className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
@@ -243,10 +287,15 @@ export function ClientDirectory({ clientType }: { clientType: ClientType }) {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search by name or phone"
-              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="Search by name, code, contact, or phone"
+              className="min-h-10 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
+          {isAdmin && (
+            <Button size="sm" icon={<Plus size={15} />} onClick={() => setModalOpen(true)}>
+              {onboardLabel}
+            </Button>
+          )}
         </div>
 
         {loading ? (

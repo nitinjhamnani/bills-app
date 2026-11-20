@@ -2,65 +2,87 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Download, GitBranch, Plus, Upload } from "lucide-react";
+import {
+  ChevronRight,
+  Download,
+  GitBranch,
+  Plus,
+  Search,
+  Upload,
+  UserRound,
+} from "lucide-react";
 import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/workspace";
+import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Button } from "@/components/ui/Button";
-import { Field, PasswordField } from "@/components/ui/Field";
-import { UserMultiSelect, type PoolUser } from "./UserMultiSelect";
-import { Modal } from "@/components/ui/Modal";
 import { ListCard } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { Field } from "@/components/ui/Field";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
-import type { BulkRowResult, ManagedBill } from "@/lib/types";
+import type { BulkRowResult } from "@/lib/types";
 
-interface BranchUser {
+interface BranchUserItem {
   id: string;
+  userCode?: string;
   fullName: string;
   phoneNumber: string;
-  passwordSet: boolean;
+  email?: string | null;
+  role?: string;
+  status?: string;
+  passwordSet?: boolean;
 }
 
-interface Branch {
+interface BranchRow {
   id: string;
   name: string;
+  code: string | null;
   address: string | null;
   state: string | null;
   location: string | null;
-  code: string | null;
-  users: BranchUser[];
+  managedBillCount: number;
+  userCount: number;
+  status: "ACTIVE" | "SUSPENDED" | string;
+  users: BranchUserItem[];
 }
+
+const STATUS_FILTERS = [
+  { key: "ALL", label: "All" },
+  { key: "ACTIVE", label: "Active" },
+  { key: "SUSPENDED", label: "Suspended" },
+] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]["key"];
 
 const emptyForm = {
   name: "",
+  code: "",
   address: "",
   state: "",
   location: "",
-  code: "",
-  userName: "",
-  phoneNumber: "",
-  userPassword: "",
 };
 
 export default function BranchesPage() {
   const router = useRouter();
   const toast = useToast();
-  const clientId = getUser()?.clientId ?? "";
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [billCounts, setBillCounts] = useState<Record<string, number>>({});
+  const user = getUser();
+  const clientId = user?.clientId ?? "";
+  const isAdmin = user?.role === "CORP_ADMIN";
+
+  const [branches, setBranches] = useState<BranchRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [step, setStep] = useState<1 | 2>(1);
-  const [pool, setPool] = useState<PoolUser[]>([]);
-  const [poolReady, setPoolReady] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+
+  const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkResults, setBulkResults] = useState<BulkRowResult[] | null>(null);
   const [bulkUploading, setBulkUploading] = useState(false);
@@ -68,19 +90,14 @@ export default function BranchesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function load() {
+    if (!clientId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const [nextBranches, bills] = await Promise.all([
-        apiFetch<Branch[]>(`/api/v1/clients/${clientId}/branches`),
-        apiFetch<ManagedBill[]>(`/api/v1/clients/${clientId}/managed-bills`),
-      ]);
-      const counts: Record<string, number> = {};
-      for (const bill of bills) {
-        if (!bill.branchId) continue;
-        counts[bill.branchId] = (counts[bill.branchId] ?? 0) + 1;
-      }
-      setBranches(nextBranches);
-      setBillCounts(counts);
+      const rows = await apiFetch<BranchRow[]>(`/api/v1/clients/${clientId}/branches`);
+      setBranches(rows);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load branches");
     } finally {
@@ -90,33 +107,36 @@ export default function BranchesPage() {
 
   useEffect(() => {
     void load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId]);
 
-  function setField(key: keyof typeof emptyForm, value: string) {
-    setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function openCreate() {
-    setForm(emptyForm);
-    setStep(1);
-    setSelectedIds([]);
-    setPool([]);
-    setPoolReady(false);
-    setCreating(true);
-  }
-
-  function goToUsers(e?: React.FormEvent) {
-    e?.preventDefault();
+  async function handleCreate(event: React.FormEvent) {
+    event.preventDefault();
     if (!form.name.trim()) {
       toast.error("Enter a branch name");
       return;
     }
-    setPoolReady(false);
-    setStep(2);
-    apiFetch<PoolUser[]>(`/api/v1/clients/${clientId}/branch-user-pool`)
-      .then(setPool)
-      .catch((err) => toast.error(err instanceof ApiError ? err.message : "Could not load users"))
-      .finally(() => setPoolReady(true));
+    setCreating(true);
+    try {
+      const created = await apiFetch<BranchRow>(`/api/v1/clients/${clientId}/branches`, {
+        method: "POST",
+        body: {
+          name: form.name.trim(),
+          code: form.code.trim() || undefined,
+          address: form.address.trim() || undefined,
+          state: form.state.trim() || undefined,
+          location: form.location.trim() || undefined,
+        },
+      });
+      toast.success("Branch created");
+      setForm(emptyForm);
+      setModalOpen(false);
+      router.push(`/client/branches/${created.id}`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not create branch");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function downloadTemplate() {
@@ -172,108 +192,187 @@ export default function BranchesPage() {
     }
   }
 
-  async function createBranch(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      if (!form.name.trim()) {
-        toast.error("Enter a branch name");
-        setBusy(false);
-        return;
-      }
-      const addingNew =
-        form.userName.trim().length > 0 ||
-        form.phoneNumber.length > 0 ||
-        form.userPassword.length > 0;
-      if (addingNew && (!form.userName.trim() || form.phoneNumber.length !== 10 || form.userPassword.length < 6)) {
-        toast.error("Enter the user's name, 10-digit phone, and a password of at least 6 characters");
-        setBusy(false);
-        return;
-      }
-      const created = await apiFetch<Branch>(`/api/v1/clients/${clientId}/branches`, {
-        method: "POST",
-        body: {
-          name: form.name,
-          address: form.address,
-          state: form.state,
-          location: form.location,
-          code: form.code,
-          ...(selectedIds.length > 0 ? { userIds: selectedIds } : {}),
-          ...(addingNew
-            ? {
-                userName: form.userName,
-                phoneNumber: form.phoneNumber,
-                userPassword: form.userPassword,
-              }
-            : {}),
-        },
-      });
-      toast.success(addingNew ? "Branch and user created" : "Branch created");
-      setForm(emptyForm);
-      setCreating(false);
-      router.push(`/client/branches/${created.id}`);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not create the branch");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const query = search.trim().toLowerCase();
+  const searched = branches.filter((branch) => {
+    if (!query) return true;
+    const addressStr = [branch.address, branch.location, branch.state]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return (
+      branch.name.toLowerCase().includes(query) ||
+      (branch.code ?? "").toLowerCase().includes(query) ||
+      addressStr.includes(query) ||
+      (branch.users ?? []).some((u) => u.fullName.toLowerCase().includes(query))
+    );
+  });
+  const counts = {
+    ALL: searched.length,
+    ACTIVE: searched.filter((b) => (b.status ?? "ACTIVE") === "ACTIVE").length,
+    SUSPENDED: searched.filter((b) => b.status === "SUSPENDED").length,
+  };
+  const visible =
+    statusFilter === "ALL"
+      ? searched
+      : searched.filter((b) => (b.status ?? "ACTIVE") === statusFilter);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Branches"
-        description="Open a branch to see its managed bills and users. You pay fetched cycles from the wallet."
+        description="Manage corporate branches, assigned branch users, and branch bills."
         actions={
-          <>
-            <Button
-              variant="outline"
-              icon={<Upload size={16} />}
-              onClick={() => {
-                setBulkResults(null);
-                setBulkOpen(true);
-              }}
-            >
-              Bulk upload
-            </Button>
-            <Button icon={<Plus size={16} />} onClick={openCreate}>
-              New branch
-            </Button>
-          </>
+          isAdmin ? (
+            <>
+              <Button
+                variant="outline"
+                icon={<Upload size={16} />}
+                onClick={() => {
+                  setBulkResults(null);
+                  setBulkOpen(true);
+                }}
+              >
+                Bulk upload
+              </Button>
+              <Button
+                icon={<Plus size={16} />}
+                onClick={() => {
+                  setForm(emptyForm);
+                  setModalOpen(true);
+                }}
+              >
+                Add branch
+              </Button>
+            </>
+          ) : undefined
         }
       />
 
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+          {STATUS_FILTERS.map((item) => {
+            const active = statusFilter === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setStatusFilter(item.key)}
+                className={cn(
+                  "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+                  active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                )}
+              >
+                {item.label}
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                    active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
+                  )}
+                >
+                  {counts[item.key]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <ListCard fitContent={false}>
+        <div className="shrink-0 border-b border-slate-100 px-4 py-3">
+          <div className="relative sm:max-w-sm">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by branch name, code, or user"
+              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+        </div>
         {loading ? (
-          <TableSkeleton cols={5} />
-        ) : branches.length === 0 ? (
+          <TableSkeleton cols={6} />
+        ) : visible.length === 0 ? (
           <EmptyState
             icon={GitBranch}
-            title="No branches yet"
-            description="Create a branch, then add a new user or assign someone who already belongs to this corporate."
+            title={branches.length === 0 ? "No branches yet" : "No branches match"}
+            description={
+              branches.length === 0
+                ? "Create a branch for this corporate to organize bills and branch users."
+                : "Try another status or clear the search."
+            }
             action={
-              <Button icon={<Plus size={16} />} onClick={openCreate}>
-                New branch
-              </Button>
+              isAdmin && branches.length === 0 ? (
+                <Button
+                  icon={<Plus size={16} />}
+                  onClick={() => {
+                    setForm(emptyForm);
+                    setModalOpen(true);
+                  }}
+                >
+                  Add branch
+                </Button>
+              ) : undefined
             }
           />
         ) : (
           <Table>
-            <THead columns={["Branch", "Code", "Address", "Users", "Bills", ""]} />
+            <THead
+              columns={[
+                "Branch",
+                "Code",
+                "Address",
+                "Users",
+                "Managed bills",
+                "Status",
+                "",
+              ]}
+            />
             <TBody>
-              {branches.map((branch) => (
+              {visible.map((branch) => (
                 <TR
                   key={branch.id}
                   className="cursor-pointer"
                   onClick={() => router.push(`/client/branches/${branch.id}`)}
                 >
                   <TD>
-                    <p className="font-semibold text-slate-900">{branch.name}</p>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                        <GitBranch size={16} />
+                      </span>
+                      <p className="truncate font-semibold text-slate-900">{branch.name}</p>
+                    </div>
                   </TD>
-                  <TD className="font-mono text-xs text-slate-600">{branch.code ?? "—"}</TD>
-                  <TD className="text-slate-700">{branch.address ?? "—"}</TD>
-                  <TD className="font-semibold text-slate-800">{branch.users.length}</TD>
-                  <TD className="font-semibold text-slate-800">{billCounts[branch.id] ?? 0}</TD>
+                  <TD className="font-mono text-xs font-semibold text-slate-800">
+                    {branch.code ?? "—"}
+                  </TD>
+                  <TD className="text-xs text-slate-600">
+                    {[branch.address, branch.location, branch.state].filter(Boolean).join(", ") || "—"}
+                  </TD>
+                  <TD className="text-xs text-slate-700">
+                    {(branch.users ?? []).length === 0 ? (
+                      <span className="text-slate-400">Unassigned</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {(branch.users ?? []).map((u) => (
+                          <span
+                            key={u.id}
+                            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700"
+                          >
+                            <UserRound size={11} className="text-slate-400" />
+                            {u.fullName}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </TD>
+                  <TD className="font-semibold text-slate-800">{branch.managedBillCount ?? 0}</TD>
+                  <TD>
+                    <StatusBadge status={branch.status ?? "ACTIVE"} />
+                  </TD>
                   <TD>
                     <ChevronRight size={16} className="ml-auto text-slate-300" />
                   </TD>
@@ -284,108 +383,62 @@ export default function BranchesPage() {
         )}
       </ListCard>
 
+      {/* Create Branch Modal */}
       <Modal
-        open={creating}
-        onClose={() => !busy && setCreating(false)}
-        title={step === 1 ? "New branch" : "Add users"}
-        description={
-          step === 1
-            ? "Step 1 of 2. Enter the branch. Next asks who can use it."
-            : "Step 2 of 2. Choose people from this corporate, add a new user, or leave both empty."
-        }
+        open={modalOpen}
+        onClose={() => !creating && setModalOpen(false)}
+        title="Add branch"
+        description="Create a branch under this corporate for bills and branch users."
         footer={
-          step === 1 ? (
-            <>
-              <Button type="button" variant="outline" onClick={() => setCreating(false)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button type="submit" form="branch-step-1">
-                Next
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button type="button" variant="outline" onClick={() => setStep(1)} disabled={busy}>
-                Back
-              </Button>
-              <Button type="submit" form="branch-step-2" loading={busy}>
-                Create branch
-              </Button>
-            </>
-          )
+          <>
+            <Button variant="outline" type="button" onClick={() => setModalOpen(false)} disabled={creating}>
+              Cancel
+            </Button>
+            <Button type="submit" form="create-client-branch-form" loading={creating}>
+              Create branch
+            </Button>
+          </>
         }
       >
-        {step === 1 ? (
-          <form id="branch-step-1" onSubmit={goToUsers} className="flex flex-col gap-4">
-            <Field
-              label="Branch name"
-              required
-              placeholder="Andheri"
-              value={form.name}
-              onChange={(e) => setField("name", e.target.value)}
-            />
-            <Field
-              label="Branch address"
-              placeholder="Link Road, Andheri West"
-              value={form.address}
-              onChange={(e) => setField("address", e.target.value)}
-            />
+        <form id="create-client-branch-form" onSubmit={handleCreate} className="flex flex-col gap-4">
+          <Field
+            label="Branch name"
+            required
+            placeholder="Andheri"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <Field
+            label="Branch code"
+            placeholder="AND"
+            hint="Optional. Must be unique for this corporate."
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+          />
+          <Field
+            label="Branch address"
+            placeholder="Link Road, Andheri West"
+            value={form.address}
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field
               label="State"
               placeholder="Maharashtra"
               value={form.state}
-              onChange={(e) => setField("state", e.target.value)}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
             />
             <Field
               label="Location"
               placeholder="Andheri West"
               value={form.location}
-              onChange={(e) => setField("location", e.target.value)}
+              onChange={(e) => setForm({ ...form, location: e.target.value })}
             />
-            <Field
-              label="Branch code"
-              placeholder="AND"
-              hint="Optional. Must be unique for this company."
-              value={form.code}
-              onChange={(e) => setField("code", e.target.value)}
-            />
-          </form>
-        ) : (
-          <form id="branch-step-2" onSubmit={createBranch} className="flex flex-col gap-4">
-            <UserMultiSelect users={pool} selected={selectedIds} onChange={setSelectedIds} loading={!poolReady} />
-            <div className="flex flex-col gap-3 border-t border-slate-100 pt-4">
-              <div>
-                <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">New user</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Optional. Leave all three fields blank to skip creating a new user.
-                </p>
-              </div>
-              <Field
-                label="User name"
-                placeholder="Ravi Shah"
-                value={form.userName}
-                onChange={(e) => setField("userName", e.target.value)}
-              />
-              <Field
-                label="User phone"
-                inputMode="numeric"
-                maxLength={10}
-                placeholder="10-digit mobile number"
-                value={form.phoneNumber}
-                onChange={(e) => setField("phoneNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
-              />
-              <PasswordField
-                label="User password"
-                minLength={6}
-                placeholder="At least 6 characters"
-                value={form.userPassword}
-                onChange={(e) => setField("userPassword", e.target.value)}
-              />
-            </div>
-          </form>
-        )}
+          </div>
+        </form>
       </Modal>
 
+      {/* Bulk Upload Modal */}
       <Modal
         open={bulkOpen}
         onClose={() => !bulkUploading && setBulkOpen(false)}

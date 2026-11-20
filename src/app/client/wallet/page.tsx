@@ -600,6 +600,14 @@ export default function ClientWalletPage() {
                       : "—"
                   }
                 />
+                {selectedRequest.remarks && (
+                  <div className="col-span-2 min-w-0">
+                    <dt className="text-[11px] font-medium text-slate-400">Remarks</dt>
+                    <dd className="mt-1 text-sm font-medium text-slate-900">
+                      {selectedRequest.remarks}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
           </div>

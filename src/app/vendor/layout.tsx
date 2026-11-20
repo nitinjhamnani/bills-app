@@ -7,24 +7,29 @@ import {
   LayoutDashboard,
   MessageCircle,
   Send,
+  Settings,
   Users,
   ArrowLeftRight,
 } from "lucide-react";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
 import { ClientSupportFab } from "@/components/support/ClientSupportFab";
+import { useNavCounts, type VendorNavCounts } from "@/lib/nav-counts";
 import { useSupportUnreadCount } from "@/lib/support-unread";
 import { apiFetch } from "@/lib/api-client";
 import type { ClientAccount, Role, UserProfile } from "@/lib/types";
 
 const VENDOR_NAV: Array<NavLink & { roles?: Role[] }> = [
   { href: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/vendor/assigned-bills", label: "My Payments", icon: Send },
-  { href: "/vendor/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/vendor/reports", label: "Reports", icon: BarChart3, roles: ["VENDOR_ADMIN"] },
-  { href: "/vendor/support", label: "Support", icon: MessageCircle },
-  { href: "/vendor/users", label: "Users", icon: Users, roles: ["VENDOR_ADMIN"] },
+  { href: "/vendor/assigned-bills", label: "Bill Payments", icon: Send },
+  { href: "/vendor/transactions", label: "Transactions", icon: ArrowLeftRight, group: "Management" },
+  { href: "/vendor/users", label: "Users", icon: Users, roles: ["VENDOR_ADMIN"], group: "Management" },
+  { href: "/vendor/reports", label: "Reports", icon: BarChart3, roles: ["VENDOR_ADMIN"], group: "Management" },
+  { href: "/vendor/support", label: "Support", icon: MessageCircle, group: "Support & Settings" },
+  { href: "/vendor/settings", label: "Settings", icon: Settings, group: "Support & Settings" },
 ];
+
+const OPERATOR_BLOCKED = ["/vendor/users", "/vendor/reports"];
 
 function VendorShell({
   user,
@@ -47,12 +52,27 @@ function VendorShell({
   }, [user.userId]);
 
   const pending = account?.status === "PENDING";
+  const navCounts = useNavCounts<VendorNavCounts>(
+    user.clientId && account && !pending ? "/api/v1/client/vendor-nav-counts" : null,
+  );
+  const operatorBlocked =
+    user.role === "VENDOR_OPERATOR" &&
+    OPERATOR_BLOCKED.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
   useEffect(() => {
     const allowedWhilePending = pathname === "/vendor/dashboard" || pathname === "/vendor/onboarding/esign";
-    if (pending && !allowedWhilePending) {
+    if ((pending && !allowedWhilePending) || operatorBlocked) {
       router.replace("/vendor/dashboard");
     }
-  }, [pending, pathname, router]);
+  }, [pending, operatorBlocked, pathname, router]);
+
+  if (operatorBlocked) return null;
+
+  const badgeByHref: Record<string, number | undefined> = {
+    "/vendor/assigned-bills": navCounts?.billPayments,
+    "/vendor/transactions": navCounts?.vendorTransactions,
+    "/vendor/support": unread,
+  };
 
   const links =
     account == null || pending
@@ -60,7 +80,11 @@ function VendorShell({
       : VENDOR_NAV;
   const nav = links
     .filter((item) => !item.roles || item.roles.includes(user.role))
-    .map((item) => (item.href === "/vendor/support" ? { ...item, badge: unread } : item));
+    .map((item) =>
+      badgeByHref[item.href] !== undefined
+        ? { ...item, badge: badgeByHref[item.href] }
+        : item,
+    );
 
   return (
     <>

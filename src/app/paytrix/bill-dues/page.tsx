@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronRight,
   Copy,
   FileText,
-  GitBranch,
   Search,
   SlidersHorizontal,
   X,
@@ -18,6 +18,7 @@ import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, SelectField } from "@/components/ui/Field";
+import { CopyableChip } from "@/components/ui/CopyableChip";
 import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -48,6 +49,10 @@ function formatDateTime(iso: string | null | undefined) {
   });
 }
 
+function inr(amount: number) {
+  return `₹${amount.toLocaleString("en-IN")}`;
+}
+
 export default function OrganisationBillDuesPage() {
   const toast = useToast();
   const router = useRouter();
@@ -59,6 +64,17 @@ export default function OrganisationBillDuesPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  async function copyText(key: string, text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      toast.success(`Copied ${text}`);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      toast.error(`Could not copy ${label}`);
+    }
+  }
 
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [selectedClientId, setSelectedClientId] = useState("ALL");
@@ -95,17 +111,6 @@ export default function OrganisationBillDuesPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function copyText(key: string, text: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedKey(key);
-      toast.success(`Copied ${text}`);
-      setTimeout(() => setCopiedKey(null), 1500);
-    } catch {
-      toast.error(`Could not copy ${label}`);
-    }
-  }
 
   const categoryOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -162,6 +167,11 @@ export default function OrganisationBillDuesPage() {
     amountMax,
   ]);
 
+  const totalDueAmount = useMemo(
+    () => visible.reduce((sum, bill) => sum + (bill.amount ?? 0), 0),
+    [visible],
+  );
+
   const totalPages = Math.ceil(visible.length / pageSize);
   const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
@@ -207,6 +217,18 @@ export default function OrganisationBillDuesPage() {
           </Button>
         }
       />
+
+      <div className="flex shrink-0 items-center justify-between gap-3 rounded-xl bg-slate-100 px-3.5 py-2.5">
+        <span className="text-xs font-semibold text-slate-700">
+          Due bills
+          <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+            {visible.length}
+          </span>
+        </span>
+        <span className="font-mono text-xs font-semibold text-slate-700">
+          Total due: <span className="text-slate-900">{inr(totalDueAmount)}</span>
+        </span>
+      </div>
 
       {activeFilterCount > 0 && (
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -280,7 +302,7 @@ export default function OrganisationBillDuesPage() {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Search corporate, bill code, biller, or consumer no."
+              placeholder="Search corporate, bill ID, biller, or consumer no."
               className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
@@ -317,9 +339,9 @@ export default function OrganisationBillDuesPage() {
               <THead
                 columns={[
                   "Corporate",
-                  "Bill Code",
+                  "Bill ID",
                   "Biller",
-                  "Consumer",
+                  "Consumer no.",
                   "Amount",
                   "Due date",
                   "Last fetch",
@@ -328,6 +350,7 @@ export default function OrganisationBillDuesPage() {
               />
               <TBody>
                 {paged.map((b) => {
+                  const corpName = b.clientName || "Unknown corporate";
                   const corpCode = b.clientCode || b.clientId;
                   return (
                     <TR
@@ -337,43 +360,39 @@ export default function OrganisationBillDuesPage() {
                     >
                       <TD>
                         <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900">
-                            {b.clientName ?? "—"}
-                          </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            {corpCode && (
-                              <button
-                                type="button"
-                                title="Copy corporate code"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  copyText(`corp:${b.id}`, corpCode, "corporate code");
-                                }}
-                                className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                              >
-                                <span>{corpCode}</span>
-                                {copiedKey === `corp:${b.id}` ? (
-                                  <Check size={11} className="text-emerald-600" />
-                                ) : (
-                                  <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
-                                )}
-                              </button>
-                            )}
-                            {b.branchName && (
-                              <span className="inline-flex items-center gap-1 rounded-md border border-indigo-100 bg-indigo-50/80 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
-                                <GitBranch size={11} className="text-indigo-500" />
-                                {b.branchName}
-                              </span>
-                            )}
-                          </div>
+                          <Link
+                            href={`/paytrix/clients/${b.clientId}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="block truncate font-semibold text-slate-900 transition-colors hover:text-indigo-600"
+                          >
+                            {corpName}
+                          </Link>
+                          {corpCode && (
+                            <button
+                              type="button"
+                              title="Copy corporate ID"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void copyText(`corp:${b.id}`, corpCode, "corporate ID");
+                              }}
+                              className="group -ml-1.5 mt-0.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                            >
+                              <span>{corpCode}</span>
+                              {copiedKey === `corp:${b.id}` ? (
+                                <Check size={12} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                              )}
+                            </button>
+                          )}
                         </div>
                       </TD>
                       <TD onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          title="Copy bill code"
-                          onClick={() => copyText(`bill:${b.id}`, b.id, "bill code")}
-                          className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                          title="Copy bill ID"
+                          onClick={() => void copyText(`bill:${b.id}`, b.id, "bill ID")}
+                          className="group -ml-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-indigo-700"
                         >
                           <span>{b.id}</span>
                           {copiedKey === `bill:${b.id}` ? (
@@ -390,34 +409,25 @@ export default function OrganisationBillDuesPage() {
                         </p>
                       </TD>
                       <TD onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          title="Copy consumer ID"
-                          onClick={() =>
-                            copyText(
-                              `consumer:${b.id}`,
-                              b.customerBillAccountNumber,
-                              "consumer ID",
-                            )
-                          }
-                          className="group inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 -ml-1.5 font-mono text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
-                        >
-                          <span>{b.customerBillAccountNumber}</span>
-                          {copiedKey === `consumer:${b.id}` ? (
-                            <Check size={12} className="text-emerald-600" />
-                          ) : (
-                            <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
-                          )}
-                        </button>
-                        <p className="mt-0.5 text-[11px] font-medium text-slate-500">
-                          {b.customerName || "—"}
-                        </p>
+                        <CopyableChip
+                          text={b.customerBillAccountNumber}
+                          label="consumer number"
+                        />
+                        {b.customerName && (
+                          <p className="mt-0.5 truncate text-[11px] font-medium text-slate-400">
+                            {b.customerName}
+                          </p>
+                        )}
                       </TD>
-                      <TD className="font-mono font-semibold text-slate-900">
-                        {b.amount != null ? `₹${b.amount.toLocaleString("en-IN")}` : "—"}
+                      <TD className="font-mono text-sm font-semibold text-slate-900">
+                        {b.amount != null ? inr(b.amount) : "—"}
                       </TD>
-                      <TD className="text-xs text-slate-600">{formatDate(b.dueDate)}</TD>
-                      <TD className="text-xs text-slate-500">{formatDateTime(b.lastFetchAt)}</TD>
+                      <TD className="text-xs font-medium text-slate-700">
+                        {formatDate(b.dueDate)}
+                      </TD>
+                      <TD className="text-xs text-slate-500">
+                        {formatDateTime(b.lastFetchAt)}
+                      </TD>
                       <TD>
                         <ChevronRight size={16} className="ml-auto text-slate-300" />
                       </TD>

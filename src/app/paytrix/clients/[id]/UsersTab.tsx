@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Ban,
   Check,
+  ChevronRight,
   Copy,
   GitBranch,
   KeyRound,
@@ -25,7 +27,7 @@ import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Field, PasswordField, SearchableSelect } from "@/components/ui/Field";
-import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
+import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
@@ -47,7 +49,9 @@ export function UsersTab({
   usersPath?: string;
 }) {
   const path = usersPath ?? `/api/v1/paytrix/clients/${clientId}/users`;
+  const isPaytrix = path.startsWith("/api/v1/paytrix/");
   const isVendor = clientId.startsWith("VD");
+  const router = useRouter();
   const toast = useToast();
   const defaultAdminRole = isVendor ? "VENDOR_ADMIN" : "CORP_ADMIN";
   const currentRole = getUser()?.role;
@@ -73,6 +77,8 @@ export function UsersTab({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [openMenuUserId, setOpenMenuUserId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
@@ -259,6 +265,18 @@ export function UsersTab({
     statusFilter === "ALL"
       ? searched
       : searched.filter((user) => user.status === statusFilter);
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const paged = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  function openUserDetail(userId: string) {
+    if (isPaytrix) {
+      router.push(`/paytrix/users/${userId}`);
+    } else if (isVendor) {
+      router.push(`/vendor/users/${userId}`);
+    } else {
+      router.push(`/client/users/${userId}`);
+    }
+  }
 
   const roleCards = isVendor
     ? [
@@ -292,43 +310,39 @@ export function UsersTab({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-          {STATUS_FILTERS.map((item) => {
-            const active = statusFilter === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setStatusFilter(item.key)}
+      <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {STATUS_FILTERS.map((item) => {
+          const active = statusFilter === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setStatusFilter(item.key);
+                setCurrentPage(1);
+              }}
+              className={cn(
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+                active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              {item.label}
+              <span
                 className={cn(
-                  "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
-                  active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
                 )}
               >
-                {item.label}
-                <span
-                  className={cn(
-                    "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                    active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
-                  )}
-                >
-                  {counts[item.key]}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {canManage && (
-          <Button icon={<UserPlus size={16} />} onClick={() => setModalOpen(true)}>
-            Add user
-          </Button>
-        )}
+                {counts[item.key]}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <ListCard fitContent={false}>
-        <div className="shrink-0 border-b border-slate-100 px-4 py-3">
-          <div className="relative sm:max-w-sm">
+        <div className="flex shrink-0 flex-col gap-3 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1 sm:max-w-sm">
             <Search
               size={16}
               className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
@@ -336,11 +350,19 @@ export function UsersTab({
             <input
               type="search"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
               placeholder="Search by name, phone, or role"
-              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+              className="min-h-10 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
+          {canManage && (
+            <Button size="sm" icon={<UserPlus size={15} />} onClick={() => setModalOpen(true)}>
+              Add user
+            </Button>
+          )}
         </div>
         {loading ? (
           <TableSkeleton cols={isVendor ? 4 : 5} />
@@ -364,58 +386,63 @@ export function UsersTab({
             }
           />
         ) : (
-          <Table>
-            <THead
-              columns={[
-                "User",
-                "Contact",
-                ...(!isVendor ? ["Branch"] : []),
-                "Status",
-                ...(canManage ? [""] : []),
-              ]}
-            />
-            <TBody>
-              {visible.map((user) => (
-                <TR key={user.id}>
-                  <TD>
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-                        {userInitials(user.fullName)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-900">{user.fullName}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                          <span className="inline-flex items-center rounded-md border border-indigo-100 bg-indigo-50/80 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
-                            {roleLabel(user.role)}
-                          </span>
-                          <button
-                            type="button"
-                            title="Copy user code"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                await navigator.clipboard.writeText(user.userCode);
-                                setCopiedKey(`code:${user.id}`);
-                                toast.success(`Copied ${user.userCode}`);
-                                setTimeout(() => setCopiedKey(null), 1500);
-                              } catch {
-                                toast.error("Could not copy code");
-                              }
-                            }}
-                            className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                          >
-                            <span>{user.userCode}</span>
-                            {copiedKey === `code:${user.id}` ? (
-                              <Check size={11} className="text-emerald-600" />
-                            ) : (
-                              <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
-                            )}
-                          </button>
+          <>
+            <Table>
+              <THead
+                columns={[
+                  "User",
+                  "Contact",
+                  ...(!isVendor ? ["Branch"] : []),
+                  "Status",
+                  "",
+                ]}
+              />
+              <TBody>
+                {paged.map((user) => (
+                  <TR
+                    key={user.id}
+                    className="cursor-pointer"
+                    onClick={() => openUserDetail(user.id)}
+                  >
+                    <TD>
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+                          {userInitials(user.fullName)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">{user.fullName}</p>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <span className="inline-flex items-center rounded-md border border-indigo-100 bg-indigo-50/80 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
+                              {roleLabel(user.role)}
+                            </span>
+                            <button
+                              type="button"
+                              title="Copy user code"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await navigator.clipboard.writeText(user.userCode);
+                                  setCopiedKey(`code:${user.id}`);
+                                  toast.success(`Copied ${user.userCode}`);
+                                  setTimeout(() => setCopiedKey(null), 1500);
+                                } catch {
+                                  toast.error("Could not copy code");
+                                }
+                              }}
+                              className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                            >
+                              <span>{user.userCode}</span>
+                              {copiedKey === `code:${user.id}` ? (
+                                <Check size={11} className="text-emerald-600" />
+                              ) : (
+                                <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </TD>
-                  <TD>
+                    </TD>
+                    <TD onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-col items-start gap-1">
                       <button
                         type="button"
@@ -496,97 +523,120 @@ export function UsersTab({
                   <TD>
                     <StatusBadge status={user.status} />
                   </TD>
-                  {canManage && (
-                    <TD className="text-right">
-                      <div
-                        ref={openMenuUserId === user.id ? menuContainerRef : undefined}
-                        className="inline-block text-left"
-                      >
-                        <button
-                          type="button"
-                          aria-label={`Actions for ${user.fullName}`}
-                          aria-haspopup="menu"
-                          aria-expanded={openMenuUserId === user.id}
-                          disabled={busyId === user.id}
-                          onClick={(event) => {
-                            if (openMenuUserId === user.id) {
-                              setOpenMenuUserId(null);
-                              return;
-                            }
-                            const rect = event.currentTarget.getBoundingClientRect();
-                            setMenuPos({
-                              top: rect.bottom + 6,
-                              right: window.innerWidth - rect.right,
-                            });
-                            setOpenMenuUserId(user.id);
-                          }}
-                          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
+                  <TD className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <div className="inline-flex items-center justify-end gap-2">
+                      {canManage && (
+                        <div
+                          ref={openMenuUserId === user.id ? menuContainerRef : undefined}
+                          className="inline-block text-left"
                         >
-                          <Settings size={15} />
-                        </button>
-
-                        {openMenuUserId === user.id && menuPos && (
-                          <div
-                            role="menu"
-                            style={{ top: menuPos.top, right: menuPos.right }}
-                            className="fixed z-50 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
+                          <button
+                            type="button"
+                            aria-label={`Actions for ${user.fullName}`}
+                            aria-haspopup="menu"
+                            aria-expanded={openMenuUserId === user.id}
+                            disabled={busyId === user.id}
+                            onClick={(event) => {
+                              if (openMenuUserId === user.id) {
+                                setOpenMenuUserId(null);
+                                return;
+                              }
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              setMenuPos({
+                                top: rect.bottom + 6,
+                                right: window.innerWidth - rect.right,
+                              });
+                              setOpenMenuUserId(user.id);
+                            }}
+                            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 disabled:opacity-50"
                           >
-                            {!isVendor && user.role !== "CORP_ADMIN" && (
+                            <Settings size={15} />
+                          </button>
+
+                          {openMenuUserId === user.id && menuPos && (
+                            <div
+                              role="menu"
+                              style={{ top: menuPos.top, right: menuPos.right }}
+                              className="fixed z-50 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
+                            >
+                              {!isVendor && user.role !== "CORP_ADMIN" && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={() => openAssignBranchModal(user)}
+                                  className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                  <GitBranch size={14} className="text-slate-400" />
+                                  Assign branch
+                                </button>
+                              )}
                               <button
                                 type="button"
                                 role="menuitem"
-                                onClick={() => openAssignBranchModal(user)}
+                                onClick={() => {
+                                  setOpenMenuUserId(null);
+                                  setNewPassword("");
+                                  setPasswordTarget(user);
+                                }}
                                 className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
                               >
-                                <GitBranch size={14} className="text-slate-400" />
-                                Assign branch
+                                <KeyRound size={14} className="text-slate-400" />
+                                Set password
                               </button>
-                            )}
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => {
-                                setOpenMenuUserId(null);
-                                setNewPassword("");
-                                setPasswordTarget(user);
-                              }}
-                              className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              <KeyRound size={14} className="text-slate-400" />
-                              Set password
-                            </button>
-                            <button
-                              type="button"
-                              role="menuitem"
-                              onClick={() => toggleStatus(user)}
-                              className={cn(
-                                "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold",
-                                user.status === "ACTIVE"
-                                  ? "text-rose-600 hover:bg-rose-50"
-                                  : "text-emerald-700 hover:bg-emerald-50",
-                              )}
-                            >
-                              {user.status === "ACTIVE" ? (
-                                <>
-                                  <Ban size={14} className="text-rose-500" />
-                                  Inactivate user
-                                </>
-                              ) : (
-                                <>
-                                  <RotateCcw size={14} className="text-emerald-600" />
-                                  Activate user
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </TD>
-                  )}
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => toggleStatus(user)}
+                                className={cn(
+                                  "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs font-semibold",
+                                  user.status === "ACTIVE"
+                                    ? "text-rose-600 hover:bg-rose-50"
+                                    : "text-emerald-700 hover:bg-emerald-50",
+                                )}
+                              >
+                                {user.status === "ACTIVE" ? (
+                                  <>
+                                    <Ban size={14} className="text-rose-500" />
+                                    Inactivate user
+                                  </>
+                                ) : (
+                                  <>
+                                    <RotateCcw size={14} className="text-emerald-600" />
+                                    Activate user
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        aria-label={`Open ${user.fullName}`}
+                        onClick={() => openUserDetail(user.id)}
+                        className="cursor-pointer text-slate-300 transition-colors hover:text-slate-600"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </TD>
                 </TR>
               ))}
             </TBody>
           </Table>
+
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={visible.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setCurrentPage(1);
+            }}
+          />
+          </>
         )}
       </ListCard>
 

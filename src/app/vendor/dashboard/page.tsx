@@ -16,7 +16,10 @@ import { getUser } from "@/lib/auth";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BillStatCard } from "@/components/ui/BillStatCard";
-import { StatCardSkeleton, Skeleton } from "@/components/ui/Skeleton";
+import { ListCard } from "@/components/ui/Card";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
+import { StatCardSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { OnboardingTracker, type CompanyDetails } from "@/components/OnboardingTracker";
@@ -115,7 +118,7 @@ export default function VendorDashboardPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={user?.displayName ? `Welcome back, ${user.displayName}` : "Dashboard"}
-        description="Bills a corporate pays are assigned to you. Follow them on My Payments until Paytrix verifies them. Verified bills also appear under Transactions."
+        description="Bills a corporate pays are assigned to you. Follow them on Bill Payments until Paytrix verifies them. Verified bills also appear under Transactions."
         actions={user?.role ? <StatusBadge status={user.role} /> : undefined}
       />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -130,49 +133,70 @@ export default function VendorDashboardPage() {
           </>
         )}
       </div>
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xs">
+
+      <ListCard>
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Assigned bills</h2>
-            <p className="mt-0.5 text-xs text-slate-500">Every bill currently assigned to this account.</p>
+            <p className="mt-0.5 text-xs text-slate-500">Recent bills currently assigned to this vendor account.</p>
           </div>
           <Button size="sm" variant="outline" onClick={() => router.push("/vendor/assigned-bills")}>
-            My Payments
+            Bill Payments
           </Button>
         </div>
         {loading ? (
-          <div className="p-4"><Skeleton className="h-16 w-full" /></div>
+          <TableSkeleton cols={6} rows={4} />
         ) : bills.length === 0 ? (
-          <p className="px-4 py-8 text-center text-sm text-slate-500">
-            Bills appear here after a corporate pays and a rule matches this account.
-          </p>
+          <EmptyState
+            icon={FileText}
+            title="No assigned bills yet"
+            description="Bills appear here after a corporate pays and a commission rule matches this vendor account."
+          />
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {bills.map((bill) => {
-              const stage = vendorStageBadge(vendorStage(bill));
-              return (
-                <li key={bill.id}>
-                  <button
-                    type="button"
+          <Table>
+            <THead columns={["Biller", "Corporate", "Consumer", "Amount", "Status", ""]} />
+            <TBody>
+              {bills.slice(0, 8).map((bill) => {
+                const stage = vendorStageBadge(vendorStage(bill));
+                return (
+                  <TR
+                    key={bill.id}
+                    className="cursor-pointer"
                     onClick={() => router.push("/vendor/assigned-bills")}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
                   >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-slate-900">{bill.billerName}</span>
-                      <span className="mt-0.5 block truncate text-xs text-slate-500">
-                        {bill.corporateName ?? "Corporate"} · {bill.customerBillAccountNumber}
-                      </span>
-                    </span>
-                    <span className="font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</span>
-                    <StatusBadge status={stage.status} label={stage.label} />
-                    <ChevronRight size={16} className="shrink-0 text-slate-300" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+                    <TD>
+                      <p className="font-semibold text-slate-900">{bill.billerName}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                        {bill.billServiceName}
+                      </p>
+                    </TD>
+                    <TD className="font-medium text-slate-700">{bill.corporateName ?? "—"}</TD>
+                    <TD>
+                      <p className="font-mono text-xs font-semibold text-slate-800">
+                        {bill.customerBillAccountNumber}
+                      </p>
+                      {bill.customerName && (
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                          {bill.customerName}
+                        </p>
+                      )}
+                    </TD>
+                    <TD className="font-mono text-sm font-semibold text-slate-900">
+                      {inr(bill.amount)}
+                    </TD>
+                    <TD>
+                      <StatusBadge status={stage.status} label={stage.label} />
+                    </TD>
+                    <TD>
+                      <ChevronRight size={16} className="ml-auto text-slate-300" />
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
         )}
-      </section>
+      </ListCard>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <button
@@ -184,7 +208,7 @@ export default function VendorDashboardPage() {
             <Send size={16} />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold text-slate-900">My Payments</span>
+            <span className="block text-sm font-semibold text-slate-900">Bill Payments</span>
             <span className="mt-0.5 block text-xs text-slate-500">
               Pay the biller, then mark the bill paid for Paytrix to verify.
             </span>

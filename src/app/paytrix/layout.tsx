@@ -21,6 +21,7 @@ import {
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppShell, type NavLink } from "@/components/AppShell";
 import { apiFetch } from "@/lib/api-client";
+import { useNavCounts, type PaytrixNavCounts } from "@/lib/nav-counts";
 import { useSupportUnreadCount } from "@/lib/support-unread";
 import { isOrgAdmin, type OrganisationMe, type UserProfile } from "@/lib/types";
 
@@ -64,7 +65,18 @@ function OrganisationShell({
   const unread = useSupportUnreadCount(
     sales ? null : "/api/v1/paytrix/support-tickets/unread-summary",
   );
+  const navCounts = useNavCounts<PaytrixNavCounts>(
+    sales ? null : "/api/v1/paytrix/nav-counts",
+  );
   const [organisationName, setOrganisationName] = useState<string | null>(null);
+  const badgeByHref: Record<string, number | undefined> = {
+    "/paytrix/bill-payments": navCounts?.billPayments,
+    "/paytrix/manage-wallets": navCounts?.walletTopups,
+    "/paytrix/bill-dues": navCounts?.billDues,
+    "/paytrix/disputes": navCounts?.disputes,
+    "/paytrix/vendor-payments": navCounts?.vendorPayments,
+    "/paytrix/support-tickets": unread,
+  };
   const nav = sales
     ? [
         { href: "/paytrix/sales", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -73,8 +85,10 @@ function OrganisationShell({
     : NAV.filter(
         (item) =>
           (item.href !== "/paytrix/transactions" && item.href !== "/paytrix/users") || isAdmin,
-      ).map(
-        (item) => (item.href === "/paytrix/support-tickets" ? { ...item, badge: unread } : item),
+      ).map((item) =>
+        badgeByHref[item.href] !== undefined
+          ? { ...item, badge: badgeByHref[item.href] }
+          : item,
       );
 
   useEffect(() => {

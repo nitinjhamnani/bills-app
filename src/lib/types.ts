@@ -22,6 +22,9 @@ export interface UserProfile {
   phoneNumber: string;
   userCode: string | null;
   displayName: string;
+  email?: string | null;
+  status?: "ACTIVE" | "SUSPENDED";
+  createdAt?: string | null;
   portal: Portal;
   userType?: string;
   role: Role;
@@ -235,6 +238,9 @@ export interface ManagedBill {
   updatedAt: string;
   branchId?: string | null;
   branchName?: string | null;
+  createdByUserId?: string | null;
+  createdByName?: string | null;
+  createdByRole?: string | null;
   latestBillFetchId?: string | null;
 }
 
@@ -419,6 +425,7 @@ export interface WalletTopup {
   createdBy?: string | null;
   approvedBy?: string | null;
   approvedOn?: string | null;
+  remarks?: string | null;
   canReview?: boolean;
 }
 

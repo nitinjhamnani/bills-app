@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Download, FileText, Search, Upload } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, Download, FileText, Search, Upload } from "lucide-react";
 import { ConfirmAction, type ActionDetail } from "@/app/paytrix/vendor-rules/ConfirmAction";
 import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
@@ -12,8 +12,7 @@ import { Field } from "@/components/ui/Field";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
 import { ListCard } from "@/components/ui/Card";
-import { CopyableChip } from "@/components/ui/CopyableChip";
-import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
+import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
@@ -35,6 +34,15 @@ function formatWhen(iso: string | null | undefined) {
 }
 
 type VendorStage = "ASSIGNED" | "IN_PROGRESS" | "VENDOR_PAID" | "VERIFIED" | "REIMBURSED";
+type StageFilter = VendorStage | "ALL" | "VERIFIED_GROUP";
+
+const STAGE_FILTERS: { key: StageFilter; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "ASSIGNED", label: "Assigned" },
+  { key: "IN_PROGRESS", label: "In progress" },
+  { key: "VENDOR_PAID", label: "Waiting for Paytrix" },
+  { key: "VERIFIED_GROUP", label: "Verified" },
+];
 
 type SheetPreview = {
   inProgress: number;
@@ -60,6 +68,10 @@ export default function AssignedBillsPage() {
   const [bills, setBills] = useState<BillPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [stageFilter, setStageFilter] = useState<StageFilter>("ALL");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [references, setReferences] = useState<Record<string, string>>({});
   const [bbpsReferences, setBbpsReferences] = useState<Record<string, string>>({});
@@ -82,14 +94,31 @@ export default function AssignedBillsPage() {
   const showSelect = canAct && pending.length > 0;
   const assignedBills = bills.filter((bill) => stageOf(bill) === "ASSIGNED");
   const inProgressBills = bills.filter((bill) => stageOf(bill) === "IN_PROGRESS");
-  const canBulkProgress = assignedBills.length > 0 && assignedBills.every((bill) => selectedIds.has(bill.id));
-  const canBulkPay = inProgressBills.length > 0 && inProgressBills.every((bill) => selectedIds.has(bill.id));
-  const bulkPayReady = inProgressBills.every(
+  const selectedAssigned = assignedBills.filter((bill) => selectedIds.has(bill.id));
+  const selectedInProgress = inProgressBills.filter((bill) => selectedIds.has(bill.id));
+  const canBulkProgress =
+    selectedIds.size > 0 &&
+    selectedAssigned.length === selectedIds.size;
+  const canBulkPay =
+    selectedIds.size > 0 &&
+    selectedInProgress.length === selectedIds.size;
+  const bulkPayReady = selectedInProgress.every(
     (bill) => (references[bill.id] ?? "").trim() && (bbpsReferences[bill.id] ?? "").trim() && proofs[bill.id],
   );
   const columns = showSelect
-    ? ["", "Biller", "Consumer no.", "Amount", "Status"]
-    : ["Biller", "Consumer no.", "Amount", "Status"];
+    ? ["", "Biller", "Corporate", "Consumer", "Due date", "Amount", "Status"]
+    : ["Biller", "Corporate", "Consumer", "Due date", "Amount", "Status"];
+
+  async function copyText(key: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      toast.success(`Copied ${text}`);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      toast.error("Could not copy");
+    }
+  }
 
   async function load() {
     const next = await apiFetch<ClientAccount>("/api/v1/client/account");
@@ -117,17 +146,54 @@ export default function AssignedBillsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = useMemo(() => {
+  const searched = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return bills;
     return bills.filter(
       (bill) =>
         bill.billerName.toLowerCase().includes(needle) ||
-        bill.customerBillAccountNumber.toLowerCase().includes(needle),
+        bill.billServiceName.toLowerCase().includes(needle) ||
+        bill.customerBillAccountNumber.toLowerCase().includes(needle) ||
+        (bill.customerName ?? "").toLowerCase().includes(needle) ||
+        (bill.corporateName ?? "").toLowerCase().includes(needle),
     );
   }, [bills, query]);
 
+  const counts = useMemo<Record<StageFilter, number>>(() => {
+    const next: Record<StageFilter, number> = {
+      ALL: searched.length,
+      ASSIGNED: 0,
+      IN_PROGRESS: 0,
+      VENDOR_PAID: 0,
+      VERIFIED: 0,
+      REIMBURSED: 0,
+      VERIFIED_GROUP: 0,
+    };
+    for (const bill of searched) {
+      const st = stageOf(bill);
+      next[st] = (next[st] ?? 0) + 1;
+      if (st === "VERIFIED" || st === "REIMBURSED") next.VERIFIED_GROUP += 1;
+    }
+    return next;
+  }, [searched]);
+
+  const visible = useMemo(() => {
+    if (stageFilter === "ALL") return searched;
+    if (stageFilter === "VERIFIED_GROUP") {
+      return searched.filter((bill) => {
+        const st = stageOf(bill);
+        return st === "VERIFIED" || st === "REIMBURSED";
+      });
+    }
+    return searched.filter((bill) => stageOf(bill) === stageFilter);
+  }, [searched, stageFilter]);
+
   const total = useMemo(() => visible.reduce((sum, bill) => sum + bill.amount, 0), [visible]);
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const paged = useMemo(
+    () => visible.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [visible, currentPage, pageSize],
+  );
 
   function toggle(id: string) {
     setSelectedIds((current) => {
@@ -149,7 +215,7 @@ export default function AssignedBillsPage() {
 
   function askMarkSelected() {
     if (!canBulkProgress) return;
-    setProgressQueue(assignedBills);
+    setProgressQueue(selectedAssigned);
   }
 
   async function markInProgress(id: string) {
@@ -224,7 +290,7 @@ export default function AssignedBillsPage() {
     setBusy(true);
     let done = 0;
     let failed = 0;
-    for (const bill of inProgressBills) {
+    for (const bill of selectedInProgress) {
       try {
         const formData = new FormData();
         formData.append("transactionReference", references[bill.id] ?? "");
@@ -375,7 +441,7 @@ export default function AssignedBillsPage() {
   }
 
   if (account && account.clientType !== "VENDOR") {
-    return <PageHeader title="My Payments" description="This page is for vendor accounts." />;
+    return <PageHeader title="Bill Payments" description="This page is for vendor accounts." />;
   }
 
   const confirmDetails: ActionDetail[] = confirmBill
@@ -408,7 +474,7 @@ export default function AssignedBillsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
-        title="My Payments"
+        title="Bill Payments"
         description="Bills assigned to you. Mark a bill in progress, then pay it."
         actions={
           canAct && bills.length > 0 ? (
@@ -434,25 +500,85 @@ export default function AssignedBillsPage() {
         }
       />
 
-      <div className="flex shrink-0 flex-col gap-3 rounded-xl bg-slate-100 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-        <span className="text-xs font-semibold text-slate-700">
-          Assigned
-          <span className="ml-2 rounded-full bg-white px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
-            {visible.length}
+      <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {STAGE_FILTERS.map((item) => {
+          const active = stageFilter === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setStageFilter(item.key);
+                setCurrentPage(1);
+              }}
+              className={cn(
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
+                active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              {item.label}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
+                )}
+              >
+                {counts[item.key] ?? 0}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-100 px-3.5 py-2.5">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700">
+          <span>
+            Assigned bills
+            <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+              {visible.length}
+            </span>
+            {visible.length !== bills.length && (
+              <span className="ml-1 text-slate-400">of {bills.length}</span>
+            )}
           </span>
-          <span className="ml-2 font-medium text-slate-500">{inr(total)}</span>
-        </span>
-        <label className="relative flex items-center">
-          <Search size={14} className="pointer-events-none absolute left-3 text-slate-400" />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Biller or consumer number"
-            aria-label="Search payments"
-            className="min-h-11 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-8 text-sm sm:w-64"
-          />
-        </label>
+          <span className="text-slate-300">·</span>
+          <span className="font-mono text-slate-700">Total amount: {inr(total)}</span>
+        </div>
+
+        {showSelect && selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              type="button"
+              disabled={busy || !canBulkProgress}
+              title="Select assigned bills to mark in progress"
+              onClick={askMarkSelected}
+            >
+              Mark in progress ({selectedAssigned.length})
+            </Button>
+            <Button
+              size="sm"
+              type="button"
+              disabled={busy || !canBulkPay}
+              title="Select in-progress bills to pay"
+              onClick={() => setBulkPayOpen(true)}
+            >
+              Pay ({selectedInProgress.length})
+            </Button>
+            <Button
+              size="sm"
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setReason("");
+                setSendBackOpen(true);
+              }}
+            >
+              Send back ({selectedIds.size})
+            </Button>
+          </div>
+        )}
       </div>
 
       {importResults && importResults.some((row) => !row.success) && (
@@ -465,29 +591,32 @@ export default function AssignedBillsPage() {
         </div>
       )}
 
-      {showSelect && selectedIds.size > 0 && (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button type="button" disabled={busy || !canBulkProgress} title="Select every assigned bill" onClick={askMarkSelected}>
-            Mark in progress
-          </Button>
-          <Button type="button" disabled={busy || !canBulkPay} title="Select every in-progress bill" onClick={() => setBulkPayOpen(true)}>
-            Pay
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => {
-              setReason("");
-              setSendBackOpen(true);
-            }}
-          >
-            Send back
-          </Button>
-        </div>
-      )}
-
       <ListCard fitContent={false}>
+        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative sm:max-w-sm sm:flex-1">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search by biller, consumer no., or corporate"
+              aria-label="Search payments"
+              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+          {showSelect && (
+            <p className="text-sm font-bold text-blue-600">
+              Select the bills you want to act on using the checkboxes.
+            </p>
+          )}
+        </div>
+
         {loading ? (
           <TableSkeleton cols={columns.length} />
         ) : visible.length === 0 ? (
@@ -497,135 +626,99 @@ export default function AssignedBillsPage() {
             description={
               bills.length === 0
                 ? "Bills appear here after a corporate pays and a rule matches this account."
-                : "Try another biller or consumer number."
+                : "Try another status filter or search query."
             }
           />
         ) : (
           <>
-            <div className="hidden min-h-0 flex-1 flex-col md:flex">
-              <Table>
-                <THead
-                  columns={
-                    showSelect
-                      ? [
-                          <input
-                            key="all"
-                            type="checkbox"
-                            aria-label={allPendingSelected ? "Clear selection" : "Select all still with you"}
-                            checked={allPendingSelected}
-                            onChange={() =>
-                              setSelectedIds(allPendingSelected ? new Set() : new Set(pending.map((bill) => bill.id)))
-                            }
-                            className="h-4 w-4 rounded border-slate-300"
-                          />,
-                          "Biller",
-                          "Consumer no.",
-                          "Amount",
-                          "Status",
-                        ]
-                      : ["Biller", "Consumer no.", "Amount", "Status"]
-                  }
-                />
-                <TBody>
-                  {visible.map((bill) => {
-                    const stage = stageOf(bill);
-                    const badge = vendorStageBadge(stage);
-                    const expanded = expandedIds.has(bill.id);
-                    const selectable = showSelect && holding(bill);
-                    return (
-                      <Fragment key={bill.id}>
-                        <TR className="cursor-pointer" onClick={() => toggleExpand(bill.id)}>
-                          {showSelect && (
-                            <TD className="w-10" onClick={(event) => event.stopPropagation()}>
-                              {selectable && (
-                                <input
-                                  type="checkbox"
-                                  aria-label={`Select ${bill.customerBillAccountNumber}`}
-                                  checked={selectedIds.has(bill.id)}
-                                  onChange={() => toggle(bill.id)}
-                                  className="h-4 w-4 rounded border-slate-300"
-                                />
-                              )}
-                            </TD>
-                          )}
-                          <TD>
-                            <div className="flex items-start gap-2">
-                              <span className="mt-0.5 text-slate-400">
-                                {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                              </span>
-                              <div className="min-w-0">
-                                <p className="font-semibold text-slate-900">{bill.billerName}</p>
-                                <p className="text-[11px] font-medium text-slate-400">{bill.billServiceName}</p>
-                                {bill.branchName && (
-                                  <p className="text-[11px] font-medium text-slate-500">{bill.branchName}</p>
-                                )}
-                              </div>
-                            </div>
-                          </TD>
-                          <TD onClick={(event) => event.stopPropagation()}>
-                            <CopyableChip text={bill.customerBillAccountNumber} label="consumer number" />
-                          </TD>
-                          <TD className="font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</TD>
-                          <TD onClick={(event) => event.stopPropagation()}>
-                            <div className="flex items-center gap-3">
-                              <StatusBadge status={badge.status} label={badge.label} />
-                              <RowAction
-                                stage={stage}
-                                canAct={canAct}
-                                busy={busy}
-                                onProgress={() => setConfirmBill({ kind: "progress", bill })}
-                                onPay={() => setPayBill(bill)}
-                              />
-                            </div>
-                          </TD>
-                        </TR>
-                        {expanded && (
-                          <TR className="hover:bg-transparent">
-                            <TD colSpan={columns.length} className="bg-slate-50 px-4 py-3 whitespace-normal!">
-                              <BillDetail bill={bill} stage={stage} />
-                            </TD>
-                          </TR>
-                        )}
-                      </Fragment>
-                    );
-                  })}
-                </TBody>
-              </Table>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-auto p-3 md:hidden">
-              <ul className="flex flex-col gap-3">
-                {visible.map((bill) => {
+            <Table>
+              <THead
+                columns={
+                  showSelect
+                    ? [
+                        <input
+                          key="all"
+                          type="checkbox"
+                          aria-label={allPendingSelected ? "Clear selection" : "Select all still with you"}
+                          checked={allPendingSelected}
+                          onChange={() =>
+                            setSelectedIds(allPendingSelected ? new Set() : new Set(pending.map((bill) => bill.id)))
+                          }
+                          className="h-4 w-4 rounded border-slate-300"
+                        />,
+                        "Biller",
+                        "Corporate",
+                        "Consumer",
+                        "Due date",
+                        "Amount",
+                        "Status",
+                      ]
+                    : ["Biller", "Corporate", "Consumer", "Due date", "Amount", "Status"]
+                }
+              />
+              <TBody>
+                {paged.map((bill) => {
                   const stage = stageOf(bill);
                   const badge = vendorStageBadge(stage);
                   const expanded = expandedIds.has(bill.id);
                   const selectable = showSelect && holding(bill);
                   return (
-                    <li
-                      key={bill.id}
-                      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[var(--shadow-card)]"
-                    >
-                      <div className="flex items-start gap-3 p-4">
-                        {selectable && (
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${bill.customerBillAccountNumber}`}
-                            checked={selectedIds.has(bill.id)}
-                            onChange={() => toggle(bill.id)}
-                            className="mt-1 h-4 w-4 rounded border-slate-300"
-                          />
+                    <Fragment key={bill.id}>
+                      <TR className="cursor-pointer" onClick={() => toggleExpand(bill.id)}>
+                        {showSelect && (
+                          <TD className="w-10" onClick={(event) => event.stopPropagation()}>
+                            {selectable && (
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${bill.customerBillAccountNumber}`}
+                                checked={selectedIds.has(bill.id)}
+                                onChange={() => toggle(bill.id)}
+                                className="h-4 w-4 rounded border-slate-300"
+                              />
+                            )}
+                          </TD>
                         )}
-                        <div className="min-w-0 flex-1">
-                          <button type="button" onClick={() => toggleExpand(bill.id)} className="w-full text-left">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-slate-900">{bill.billerName}</p>
-                                <p className="text-xs text-slate-500">{bill.customerBillAccountNumber}</p>
-                              </div>
-                              <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</p>
+                        <TD>
+                          <div className="flex items-start gap-2">
+                            <span className="mt-0.5 text-slate-400">
+                              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-slate-900">{bill.billerName}</p>
+                              <p className="mt-0.5 text-[11px] font-medium text-slate-400">{bill.billServiceName}</p>
                             </div>
+                          </div>
+                        </TD>
+                        <TD>
+                          <p className="font-semibold text-slate-900">{bill.corporateName ?? "—"}</p>
+                          {bill.branchName && (
+                            <p className="mt-0.5 text-[11px] font-medium text-slate-400">{bill.branchName}</p>
+                          )}
+                        </TD>
+                        <TD onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            title="Copy consumer number"
+                            onClick={() => copyText(`consumer:${bill.id}`, bill.customerBillAccountNumber)}
+                            className="group -ml-1.5 inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-800 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                          >
+                            <span>{bill.customerBillAccountNumber}</span>
+                            {copiedKey === `consumer:${bill.id}` ? (
+                              <Check size={11} className="text-emerald-600" />
+                            ) : (
+                              <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                            )}
                           </button>
-                          <div className="mt-3 flex items-center justify-between gap-3">
+                          {bill.customerName && (
+                            <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                              {bill.customerName}
+                            </p>
+                          )}
+                        </TD>
+                        <TD className="text-xs text-slate-600">{formatWhen(bill.dueDate)}</TD>
+                        <TD className="font-mono text-sm font-semibold text-slate-900">{inr(bill.amount)}</TD>
+                        <TD onClick={(event) => event.stopPropagation()}>
+                          <div className="flex items-center gap-3">
                             <StatusBadge status={badge.status} label={badge.label} />
                             <RowAction
                               stage={stage}
@@ -635,18 +728,32 @@ export default function AssignedBillsPage() {
                               onPay={() => setPayBill(bill)}
                             />
                           </div>
-                        </div>
-                      </div>
+                        </TD>
+                      </TR>
                       {expanded && (
-                        <div className="border-t border-slate-100 bg-slate-50 px-3 py-3">
-                          <BillDetail bill={bill} stage={stage} />
-                        </div>
+                        <TR className="hover:bg-transparent">
+                          <TD colSpan={columns.length} className="bg-slate-50 px-4 py-3 whitespace-normal!">
+                            <BillDetail bill={bill} stage={stage} />
+                          </TD>
+                        </TR>
                       )}
-                    </li>
+                    </Fragment>
                   );
                 })}
-              </ul>
-            </div>
+              </TBody>
+            </Table>
+
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={visible.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
           </>
         )}
       </ListCard>
@@ -741,7 +848,7 @@ export default function AssignedBillsPage() {
           if (!busy) setBulkPayOpen(false);
         }}
         size="xl"
-        title={inProgressBills.length === 1 ? "Pay this bill" : `Pay ${inProgressBills.length} bills`}
+        title={selectedInProgress.length === 1 ? "Pay this bill" : `Pay ${selectedInProgress.length} bills`}
         description="Each bill needs its own transaction reference, BBPS reference, and proof."
         footer={
           <>
@@ -755,7 +862,7 @@ export default function AssignedBillsPage() {
         }
       >
         <div className="flex flex-col gap-4">
-          {inProgressBills.map((bill) => (
+          {selectedInProgress.map((bill) => (
             <div key={bill.id} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3">
               <div>
                 <p className="text-sm font-semibold text-slate-900">{bill.billerName}</p>

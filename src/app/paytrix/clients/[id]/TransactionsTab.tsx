@@ -63,6 +63,11 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
   const [topups, setTopups] = useState<WalletTopup[]>([]);
   const [topupsLoading, setTopupsLoading] = useState(true);
   const [busyTopupId, setBusyTopupId] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{
+    item: WalletTopup;
+    approve: boolean;
+  } | null>(null);
+  const [reviewRemarks, setReviewRemarks] = useState("");
   const [proofId, setProofId] = useState<string | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
 
@@ -146,14 +151,33 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
     }
   }
 
-  async function reviewTopup(id: string, approve: boolean) {
-    setBusyTopupId(id);
+  function openReviewModal(item: WalletTopup, approve: boolean) {
+    setReviewRemarks("");
+    setReviewTarget({ item, approve });
+  }
+
+  function closeReviewModal() {
+    if (busyTopupId) return;
+    setReviewTarget(null);
+    setReviewRemarks("");
+  }
+
+  async function confirmReviewTopup(event: React.FormEvent) {
+    event.preventDefault();
+    if (!reviewTarget) return;
+    const { item, approve } = reviewTarget;
+    setBusyTopupId(item.id);
     try {
-      await apiFetch(`/api/v1/paytrix/wallet-topups/${id}/review`, {
+      await apiFetch(`/api/v1/paytrix/wallet-topups/${item.id}/review`, {
         method: "POST",
-        body: { approve },
+        body: {
+          approve,
+          remarks: reviewRemarks.trim() || null,
+        },
       });
       toast.success(approve ? "Top-up accepted and wallet credited" : "Top-up rejected");
+      setReviewTarget(null);
+      setReviewRemarks("");
       await Promise.all([loadTopups(), loadWalletAndLedger()]);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Action failed");
@@ -383,6 +407,11 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
                   </TD>
                   <TD>
                     <StatusBadge status={t.status} />
+                    {t.remarks && (
+                      <p className="mt-1 max-w-xs truncate text-xs text-slate-500" title={t.remarks}>
+                        {t.remarks}
+                      </p>
+                    )}
                   </TD>
                   <TD className="text-slate-500">
                     {new Date(t.createdAt).toLocaleDateString("en-IN", {
@@ -398,7 +427,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
                           <Button
                             size="sm"
                             disabled={busyTopupId === t.id}
-                            onClick={() => reviewTopup(t.id, true)}
+                            onClick={() => openReviewModal(t, true)}
                           >
                             Accept
                           </Button>
@@ -406,7 +435,7 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
                             size="sm"
                             variant="outline"
                             disabled={busyTopupId === t.id}
-                            onClick={() => reviewTopup(t.id, false)}
+                            onClick={() => openReviewModal(t, false)}
                           >
                             Reject
                           </Button>
@@ -644,6 +673,92 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
             ))}
           </SelectField>
         </div>
+      </Modal>
+
+      <Modal
+        open={reviewTarget !== null}
+        onClose={closeReviewModal}
+        title={reviewTarget?.approve ? "Accept top-up request" : "Reject top-up request"}
+        description={
+          reviewTarget
+            ? reviewTarget.approve
+              ? `Confirm and credit the corporate wallet with ${inr(reviewTarget.item.amount)}.`
+              : `Confirm rejection of the top-up request for ${inr(reviewTarget.item.amount)}.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={closeReviewModal} disabled={busyTopupId !== null}>
+              Cancel
+            </Button>
+            <Button
+              form="review-corp-topup-form"
+              type="submit"
+              variant={reviewTarget?.approve ? "primary" : "danger"}
+              loading={busyTopupId !== null}
+            >
+              {reviewTarget?.approve ? "Accept top-up" : "Reject top-up"}
+            </Button>
+          </>
+        }
+      >
+        {reviewTarget && (
+          <form id="review-corp-topup-form" onSubmit={confirmReviewTopup} className="flex flex-col gap-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                <div className="min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Amount</dt>
+                  <dd className="mt-1 font-mono text-sm font-bold text-slate-900">
+                    {inr(reviewTarget.item.amount)}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Mode</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800">
+                    {reviewTarget.item.paymentMode}
+                  </dd>
+                </div>
+                <div className="col-span-2 min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Reference / UTR</dt>
+                  <dd className="mt-1 truncate font-mono text-sm font-medium text-slate-800">
+                    {reviewTarget.item.paymentReference ?? "—"}
+                  </dd>
+                </div>
+              </dl>
+              {reviewTarget.item.hasProof && (
+                <div className="mt-3 border-t border-slate-200/80 pt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setProofId(`/api/v1/clients/${clientId}/wallet/topups/${reviewTarget.item.id}/proof`)
+                    }
+                  >
+                    View proof
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-slate-700">Remarks</span>
+              <textarea
+                autoFocus
+                rows={3}
+                maxLength={500}
+                value={reviewRemarks}
+                onChange={(e) => setReviewRemarks(e.target.value)}
+                placeholder={
+                  reviewTarget.approve
+                    ? "Enter remarks for approving this top-up request..."
+                    : "Enter remarks explaining why this top-up request is being rejected..."
+                }
+                className="w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </label>
+          </form>
+        )}
       </Modal>
 
       <ProofModal src={proofId} onClose={() => setProofId(null)} />

@@ -52,6 +52,13 @@ export function getInflightCount() {
   return inflight;
 }
 
+export const NAV_COUNTS_CHANGED_EVENT = "nav-counts-changed";
+
+export function notifyNavCountsChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(NAV_COUNTS_CHANGED_EVENT));
+}
+
 function beginRequest() {
   setInflight(inflight + 1);
 }
@@ -158,6 +165,10 @@ export async function trackedFetch(
         redirectExpiredSession(activeSession.sessionId);
       }
     }
+    const reqMethod = (init?.method ?? "GET").toUpperCase();
+    if (reqMethod !== "GET" && response.ok) {
+      notifyNavCountsChanged();
+    }
     return response;
   } finally {
     endRequest();
@@ -226,6 +237,10 @@ export async function apiFetch<T>(
         redirectExpiredSession(activeSession?.sessionId);
       }
       throw new ApiError(message, response.status, errorCode);
+    }
+
+    if (method !== "GET" && !path.startsWith("/api/v1/auth/")) {
+      notifyNavCountsChanged();
     }
 
     if (response.status === 204) return undefined as T;

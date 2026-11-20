@@ -84,6 +84,11 @@ export default function ManageWalletsPage() {
   const [pending, setPending] = useState<PendingWalletTopup[]>([]);
   const [pendingLoading, setPendingLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewTarget, setReviewTarget] = useState<{
+    item: PendingWalletTopup;
+    approve: boolean;
+  } | null>(null);
+  const [reviewRemarks, setReviewRemarks] = useState("");
   const [topupSearch, setTopupSearch] = useState("");
 
   const [wallets, setWallets] = useState<ClientWallet[]>([]);
@@ -149,14 +154,33 @@ export default function ManageWalletsPage() {
     loadLedger(wallet.clientId);
   }
 
-  async function reviewTopup(id: string, approve: boolean) {
-    setReviewingId(id);
+  function openReviewModal(item: PendingWalletTopup, approve: boolean) {
+    setReviewRemarks("");
+    setReviewTarget({ item, approve });
+  }
+
+  function closeReviewModal() {
+    if (reviewingId) return;
+    setReviewTarget(null);
+    setReviewRemarks("");
+  }
+
+  async function confirmReviewTopup(event: React.FormEvent) {
+    event.preventDefault();
+    if (!reviewTarget) return;
+    const { item, approve } = reviewTarget;
+    setReviewingId(item.id);
     try {
-      await apiFetch(`/api/v1/paytrix/wallet-topups/${id}/review`, {
+      await apiFetch(`/api/v1/paytrix/wallet-topups/${item.id}/review`, {
         method: "POST",
-        body: { approve },
+        body: {
+          approve,
+          remarks: reviewRemarks.trim() || null,
+        },
       });
       toast.success(approve ? "Top-up accepted and wallet credited" : "Top-up rejected");
+      setReviewTarget(null);
+      setReviewRemarks("");
       await loadPending();
       await loadWallets();
       if (selected) await loadLedger(selected.clientId);
@@ -363,16 +387,18 @@ export default function ManageWalletsPage() {
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
-                            loading={reviewingId === item.id}
-                            onClick={() => reviewTopup(item.id, true)}
+                            loading={reviewingId === item.id && reviewTarget?.approve === true}
+                            disabled={reviewingId === item.id}
+                            onClick={() => openReviewModal(item, true)}
                           >
                             Accept
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
+                            loading={reviewingId === item.id && reviewTarget?.approve === false}
                             disabled={reviewingId === item.id}
-                            onClick={() => reviewTopup(item.id, false)}
+                            onClick={() => openReviewModal(item, false)}
                           >
                             Reject
                           </Button>
@@ -662,6 +688,104 @@ export default function ManageWalletsPage() {
                 Balance after this credit: {inr(nextBalance)}
               </p>
             )}
+          </form>
+        )}
+      </Modal>
+      <Modal
+        open={reviewTarget !== null}
+        onClose={closeReviewModal}
+        title={reviewTarget?.approve ? "Accept top-up request" : "Reject top-up request"}
+        description={
+          reviewTarget
+            ? reviewTarget.approve
+              ? `Confirm and credit ${reviewTarget.item.clientName}'s wallet with ${inr(reviewTarget.item.amount)}.`
+              : `Confirm rejection of ${reviewTarget.item.clientName}'s top-up request for ${inr(reviewTarget.item.amount)}.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="outline" onClick={closeReviewModal} disabled={reviewingId !== null}>
+              Cancel
+            </Button>
+            <Button
+              form="review-topup-form"
+              type="submit"
+              variant={reviewTarget?.approve ? "primary" : "danger"}
+              loading={reviewingId !== null}
+            >
+              {reviewTarget?.approve ? "Accept top-up" : "Reject top-up"}
+            </Button>
+          </>
+        }
+      >
+        {reviewTarget && (
+          <form id="review-topup-form" onSubmit={confirmReviewTopup} className="flex flex-col gap-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                <div className="min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Corporate</dt>
+                  <dd className="mt-1 truncate text-sm font-semibold text-slate-900">
+                    {reviewTarget.item.clientName}
+                    {reviewTarget.item.clientCode && (
+                      <span className="ml-1.5 font-mono text-xs font-medium text-slate-400">
+                        {reviewTarget.item.clientCode}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Amount</dt>
+                  <dd className="mt-1 font-mono text-sm font-bold text-slate-900">
+                    {inr(reviewTarget.item.amount)}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Mode</dt>
+                  <dd className="mt-1 text-sm font-medium text-slate-800">
+                    {MODE_LABELS[reviewTarget.item.paymentMode] ?? reviewTarget.item.paymentMode}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[11px] font-medium text-slate-400">Reference / UTR</dt>
+                  <dd className="mt-1 truncate font-mono text-sm font-medium text-slate-800">
+                    {reviewTarget.item.paymentReference ?? "—"}
+                  </dd>
+                </div>
+              </dl>
+              {reviewTarget.item.hasProof && (
+                <div className="mt-3 border-t border-slate-200/80 pt-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setProofId(
+                        `/api/v1/clients/${reviewTarget.item.clientId}/wallet/topups/${reviewTarget.item.id}/proof`,
+                      )
+                    }
+                  >
+                    View proof
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium text-slate-700">Remarks</span>
+              <textarea
+                autoFocus
+                rows={3}
+                maxLength={500}
+                value={reviewRemarks}
+                onChange={(e) => setReviewRemarks(e.target.value)}
+                placeholder={
+                  reviewTarget.approve
+                    ? "Enter remarks for approving this top-up request..."
+                    : "Enter remarks explaining why this top-up request is being rejected..."
+                }
+                className="w-full rounded-lg border border-slate-300 bg-surface px-3 py-2 text-sm text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-accent focus:ring-2 focus:ring-accent/20"
+              />
+            </label>
           </form>
         )}
       </Modal>

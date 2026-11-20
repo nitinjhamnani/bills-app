@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeftRight, SlidersHorizontal } from "lucide-react";
+import { ArrowLeftRight, Search, SlidersHorizontal } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { getUser } from "@/lib/auth";
 import { Button } from "@/components/ui/Button";
@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Field, SelectField } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { TableSkeleton } from "@/components/ui/Skeleton";
-import { Table, TBody, TD, THead, TR } from "@/components/ui/Table";
+import { Table, TBody, TD, THead, TR, TablePagination } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
 
@@ -29,6 +29,12 @@ type OrganisationTransaction = {
 
 type Direction = "ALL" | "CREDIT" | "DEBIT";
 type PartyKind = "ALL" | "CORP" | "VENDOR";
+
+const DIRECTION_TABS: { key: Direction; label: string }[] = [
+  { key: "ALL", label: "All" },
+  { key: "CREDIT", label: "Money in" },
+  { key: "DEBIT", label: "Money out" },
+];
 
 const CATEGORY_LABELS: Record<string, string> = {
   RECHARGE: "Recharge",
@@ -76,6 +82,8 @@ export default function OrganisationTransactionsPage() {
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -93,7 +101,7 @@ export default function OrganisationTransactionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [isAdmin]);
+  }, [isAdmin, toast]);
 
   const parties = useMemo(() => {
     const seen = new Map<string, { id: string; name: string; type: OrganisationTransaction["counterpartyType"] }>();
@@ -112,9 +120,8 @@ export default function OrganisationTransactionsPage() {
     return [...new Set(rows.map((row) => row.category))].sort();
   }, [rows]);
 
-  const visible = useMemo(() => {
+  const narrowed = useMemo(() => {
     let result = rows;
-    if (direction !== "ALL") result = result.filter((row) => row.entryType === direction);
     if (partyKindFilter !== "ALL") result = result.filter((row) => row.counterpartyType === partyKindFilter);
     if (partyId !== "ALL") result = result.filter((row) => row.counterpartyId === partyId);
     if (category !== "ALL") result = result.filter((row) => row.category === category);
@@ -143,10 +150,29 @@ export default function OrganisationTransactionsPage() {
       );
     }
     return result;
-  }, [rows, direction, partyKindFilter, partyId, category, dateFrom, dateTo, amountMin, amountMax, search]);
+  }, [rows, partyKindFilter, partyId, category, dateFrom, dateTo, amountMin, amountMax, search]);
+
+  const counts = useMemo<Record<Direction, number>>(
+    () => ({
+      ALL: narrowed.length,
+      CREDIT: narrowed.filter((row) => row.entryType === "CREDIT").length,
+      DEBIT: narrowed.filter((row) => row.entryType === "DEBIT").length,
+    }),
+    [narrowed],
+  );
+
+  const visible = useMemo(
+    () => (direction === "ALL" ? narrowed : narrowed.filter((row) => row.entryType === direction)),
+    [narrowed, direction],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const paged = useMemo(
+    () => visible.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [visible, currentPage, pageSize],
+  );
 
   const activeFilterCount = [
-    direction !== "ALL",
     partyKindFilter !== "ALL",
     partyId !== "ALL",
     category !== "ALL",
@@ -154,7 +180,6 @@ export default function OrganisationTransactionsPage() {
     Boolean(dateTo),
     Boolean(amountMin),
     Boolean(amountMax),
-    Boolean(search.trim()),
   ].filter(Boolean).length;
 
   function resetFilters() {
@@ -167,6 +192,7 @@ export default function OrganisationTransactionsPage() {
     setAmountMin("");
     setAmountMax("");
     setSearch("");
+    setCurrentPage(1);
   }
 
   if (!isAdmin) {
@@ -179,12 +205,10 @@ export default function OrganisationTransactionsPage() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Transactions"
-        description={
-          loading ? "Loading..." : `${visible.length} of ${rows.length} organisation transactions`
-        }
+        description="Wallet recharges, bill payments, vendor payouts, and commissions across Paytrix."
         actions={
           <Button variant="outline" size="sm" icon={<SlidersHorizontal size={14} />} onClick={() => setFilterOpen(true)}>
             Filter
@@ -196,7 +220,57 @@ export default function OrganisationTransactionsPage() {
           </Button>
         }
       />
+
+      <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
+        {DIRECTION_TABS.map((item) => {
+          const active = direction === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => {
+                setDirection(item.key);
+                setCurrentPage(1);
+              }}
+              className={cn(
+                "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 text-xs font-semibold transition-colors",
+                active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              {item.label}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
+                )}
+              >
+                {counts[item.key]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <ListCard fitContent={false}>
+        <div className="shrink-0 border-b border-slate-100 px-4 py-3">
+          <div className="relative sm:max-w-sm">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              placeholder="Search by description, corporate, vendor, or category"
+              className="min-h-11 w-full rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            />
+          </div>
+        </div>
+
         {loading ? (
           <TableSkeleton cols={5} />
         ) : visible.length === 0 ? (
@@ -210,30 +284,44 @@ export default function OrganisationTransactionsPage() {
             }
           />
         ) : (
-          <Table>
-            <THead columns={["When", "Direction", "What", "With", "Amount"]} />
-            <TBody>
-              {visible.map((row) => (
-                <TR key={row.id}>
-                  <TD className="text-slate-500">{when(row.createdAt)}</TD>
-                  <TD className={cn("font-semibold", row.entryType === "CREDIT" ? "text-emerald-700" : "text-rose-700")}>
-                    {row.entryType === "CREDIT" ? "Money in" : "Money out"}
-                  </TD>
-                  <TD>
-                    <p className="font-medium text-slate-900">{row.description}</p>
-                    <p className="mt-1 text-[11px] font-medium text-slate-400">{categoryLabel(row.category)}</p>
-                  </TD>
-                  <TD>
-                    <p className="font-medium text-slate-900">{row.counterpartyName ?? "—"}</p>
-                    {partyKind(row.counterpartyType) && (
-                      <p className="mt-1 text-[11px] font-medium text-slate-400">{partyKind(row.counterpartyType)}</p>
-                    )}
-                  </TD>
-                  <TD className="font-mono font-semibold text-slate-900">{inr(row.amount)}</TD>
-                </TR>
-              ))}
-            </TBody>
-          </Table>
+          <>
+            <Table>
+              <THead columns={["When", "Direction", "What", "With", "Amount"]} />
+              <TBody>
+                {paged.map((row) => (
+                  <TR key={row.id}>
+                    <TD className="text-xs text-slate-500">{when(row.createdAt)}</TD>
+                    <TD className={cn("font-semibold", row.entryType === "CREDIT" ? "text-emerald-700" : "text-rose-700")}>
+                      {row.entryType === "CREDIT" ? "Money in" : "Money out"}
+                    </TD>
+                    <TD>
+                      <p className="font-semibold text-slate-900">{row.description}</p>
+                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">{categoryLabel(row.category)}</p>
+                    </TD>
+                    <TD>
+                      <p className="font-medium text-slate-900">{row.counterpartyName ?? "—"}</p>
+                      {partyKind(row.counterpartyType) && (
+                        <p className="mt-0.5 text-[11px] font-medium text-slate-400">{partyKind(row.counterpartyType)}</p>
+                      )}
+                    </TD>
+                    <TD className="font-mono font-semibold text-slate-900">{inr(row.amount)}</TD>
+                  </TR>
+                ))}
+              </TBody>
+            </Table>
+
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={visible.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
+          </>
         )}
       </ListCard>
 
@@ -252,12 +340,26 @@ export default function OrganisationTransactionsPage() {
         }
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <SelectField label="Direction" value={direction} onChange={(e) => setDirection(e.target.value as Direction)}>
+          <SelectField
+            label="Direction"
+            value={direction}
+            onChange={(e) => {
+              setDirection(e.target.value as Direction);
+              setCurrentPage(1);
+            }}
+          >
             <option value="ALL">All</option>
             <option value="CREDIT">Money in</option>
             <option value="DEBIT">Money out</option>
           </SelectField>
-          <SelectField label="Category" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <SelectField
+            label="Category"
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
             <option value="ALL">All</option>
             {categories.map((item) => (
               <option key={item} value={item}>
@@ -268,13 +370,23 @@ export default function OrganisationTransactionsPage() {
           <SelectField
             label="Party type"
             value={partyKindFilter}
-            onChange={(e) => setPartyKindFilter(e.target.value as PartyKind)}
+            onChange={(e) => {
+              setPartyKindFilter(e.target.value as PartyKind);
+              setCurrentPage(1);
+            }}
           >
             <option value="ALL">All</option>
             <option value="CORP">Corporates</option>
             <option value="VENDOR">Vendors</option>
           </SelectField>
-          <SelectField label="With" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
+          <SelectField
+            label="With"
+            value={partyId}
+            onChange={(e) => {
+              setPartyId(e.target.value);
+              setCurrentPage(1);
+            }}
+          >
             <option value="ALL">Everyone</option>
             {parties.map((party) => (
               <option key={party.id} value={party.id}>
@@ -282,16 +394,43 @@ export default function OrganisationTransactionsPage() {
               </option>
             ))}
           </SelectField>
-          <Field label="From" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          <Field label="To" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          <Field label="Min amount" type="number" min={0} value={amountMin} onChange={(e) => setAmountMin(e.target.value)} />
-          <Field label="Max amount" type="number" min={0} value={amountMax} onChange={(e) => setAmountMax(e.target.value)} />
           <Field
-            label="Search"
-            className="sm:col-span-2"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Name, category, or description"
+            label="From"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
+          <Field
+            label="To"
+            type="date"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
+          <Field
+            label="Min amount"
+            type="number"
+            min={0}
+            value={amountMin}
+            onChange={(e) => {
+              setAmountMin(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
+          <Field
+            label="Max amount"
+            type="number"
+            min={0}
+            value={amountMax}
+            onChange={(e) => {
+              setAmountMax(e.target.value);
+              setCurrentPage(1);
+            }}
           />
         </div>
       </Modal>

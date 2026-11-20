@@ -6,7 +6,6 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Download,
   FileText,
   PackageCheck,
   Search,
@@ -15,6 +14,7 @@ import {
   Upload,
   UserPlus,
   X,
+  Zap,
 } from "lucide-react";
 import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
@@ -23,13 +23,13 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { Field, SelectField } from "@/components/ui/Field";
+import { Field, SearchableSelect, SelectField } from "@/components/ui/Field";
 import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Table";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
-import type { BulkRowResult, OrgStatus, VendorStage } from "@/lib/types";
+import type { BulkRowResult, Client, OrgStatus, VendorStage } from "@/lib/types";
 import { API_BASE_URL } from "@/lib/workspace";
 
 /** Direct representation of the `bill_payment` table without joining bills, corporates, branches, or commissions. */
@@ -65,11 +65,12 @@ interface BillPaymentRow {
   canSettle: boolean;
 }
 
-const QUEUE: { key: OrgStatus | "ALL"; label: string }[] = [
+type QueueTab = "ALL" | "ASSIGNED" | "NOT_ASSIGNED";
+
+const QUEUE: { key: QueueTab; label: string }[] = [
   { key: "ALL", label: "All" },
-  { key: "PENDING", label: "Awaiting pick-up" },
-  { key: "IN_PROCESS", label: "In process" },
-  { key: "PAID", label: "Paid" },
+  { key: "ASSIGNED", label: "Assigned" },
+  { key: "NOT_ASSIGNED", label: "Not Assigned" },
 ];
 
 function formatDateTime(iso: string | null | undefined) {
@@ -115,7 +116,7 @@ export default function OrganisationBillPaymentsPage() {
   const toast = useToast();
   const [payments, setPayments] = useState<BillPaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [queue, setQueue] = useState<OrgStatus | "ALL">("ALL");
+  const [queue, setQueue] = useState<QueueTab>("ALL");
 
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -126,17 +127,14 @@ export default function OrganisationBillPaymentsPage() {
   const [selectedCorpId, setSelectedCorpId] = useState("ALL");
   const [selectedOperator, setSelectedOperator] = useState("ALL");
   const [consumerNumber, setConsumerNumber] = useState("");
-  const [assignedToFilter, setAssignedToFilter] = useState<"ALL" | "ORG" | "VENDOR">("ALL");
   const [selectedAssigneeId, setSelectedAssigneeId] = useState("ALL");
   const [amountMin, setAmountMin] = useState("");
   const [amountMax, setAmountMax] = useState("");
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [pickingUpId, setPickingUpId] = useState<string | null>(null);
 
   const [bulkPickingUp, setBulkPickingUp] = useState(false);
-  const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResults, setImportResults] = useState<BulkRowResult[] | null>(null);
   const [resultsModalOpen, setResultsModalOpen] = useState(false);
@@ -154,6 +152,12 @@ export default function OrganisationBillPaymentsPage() {
   const [manualIds, setManualIds] = useState<Set<string>>(new Set());
   const [bbpsById, setBbpsById] = useState<Record<string, BillCheck>>({});
   const [checkingBbps, setCheckingBbps] = useState(false);
+
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [assignMode, setAssignMode] = useState<"manual" | "rules">("manual");
+  const [activeVendors, setActiveVendors] = useState<Client[]>([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [chosenVendorId, setChosenVendorId] = useState("");
   const [previewingAssign, setPreviewingAssign] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [assignLines, setAssignLines] = useState<AssignmentPlan[] | null>(null);
@@ -163,7 +167,10 @@ export default function OrganisationBillPaymentsPage() {
   async function load(silent = false) {
     if (!silent) setLoading(true);
     try {
-      setPayments(await apiFetch<BillPaymentRow[]>("/api/v1/paytrix/my-payments"));
+      const next = await apiFetch<BillPaymentRow[]>("/api/v1/paytrix/my-payments");
+      setPayments(next);
+      const unpicked = new Set(next.filter(isUnpickedRow).map((row) => row.id));
+      setSelectedIds((prev) => new Set(Array.from(prev).filter((id) => unpicked.has(id))));
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to load bill payments");
     } finally {
@@ -188,32 +195,37 @@ export default function OrganisationBillPaymentsPage() {
     }
   }
 
+  const unpaidPayments = useMemo(
+    () => payments.filter((p) => p.orgStatus !== "PAID"),
+    [payments],
+  );
+
   const corpOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of payments) map.set(p.corpId, p.corpName);
+    for (const p of unpaidPayments) map.set(p.corpId, p.corpName);
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [payments]);
+  }, [unpaidPayments]);
 
   const operatorOptions = useMemo(() => {
     const set = new Set<string>();
-    for (const p of payments) {
+    for (const p of unpaidPayments) {
       if (p.operatorName) set.add(p.operatorName);
     }
     return Array.from(set).sort();
-  }, [payments]);
+  }, [unpaidPayments]);
 
   const vendorOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const p of payments) {
+    for (const p of unpaidPayments) {
       if (p.billAssignedTo === "VENDOR") {
         map.set(p.billAssignedToId, p.billAssignedToName);
       }
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-  }, [payments]);
+  }, [unpaidPayments]);
 
   const narrowed = useMemo(() => {
-    let result = payments;
+    let result = unpaidPayments;
     if (selectedCorpId !== "ALL") {
       result = result.filter((p) => p.corpId === selectedCorpId);
     }
@@ -223,9 +235,6 @@ export default function OrganisationBillPaymentsPage() {
     if (consumerNumber.trim()) {
       const q = consumerNumber.trim().toLowerCase();
       result = result.filter((p) => (p.consumerId ?? "").toLowerCase().includes(q));
-    }
-    if (assignedToFilter !== "ALL") {
-      result = result.filter((p) => p.billAssignedTo === assignedToFilter);
     }
     if (selectedAssigneeId !== "ALL") {
       result = result.filter((p) => p.billAssignedToId === selectedAssigneeId);
@@ -250,34 +259,32 @@ export default function OrganisationBillPaymentsPage() {
     result = result.filter((p) => matchesAmount(p.billAmount, amountMin, amountMax));
     return result;
   }, [
-    payments,
+    unpaidPayments,
     selectedCorpId,
     selectedOperator,
     consumerNumber,
-    assignedToFilter,
     selectedAssigneeId,
     search,
     amountMin,
     amountMax,
   ]);
 
-  const counts = useMemo<Record<OrgStatus | "ALL", number>>(
+  const counts = useMemo<Record<QueueTab, number>>(
     () => ({
       ALL: narrowed.length,
-      NA: narrowed.filter((p) => p.orgStatus === "NA").length,
-      PENDING: narrowed.filter((p) => p.orgStatus === "PENDING").length,
-      IN_PROCESS: narrowed.filter((p) => p.orgStatus === "IN_PROCESS").length,
-      PAID: narrowed.filter((p) => p.orgStatus === "PAID").length,
+      ASSIGNED: narrowed.filter((p) => p.billAssignedTo === "VENDOR").length,
+      NOT_ASSIGNED: narrowed.filter((p) => p.billAssignedTo !== "VENDOR").length,
     }),
     [narrowed],
   );
 
-  const visible = useMemo(
-    () => (queue === "ALL" ? narrowed : narrowed.filter((p) => p.orgStatus === queue)),
-    [narrowed, queue],
-  );
+  const visible = useMemo(() => {
+    if (queue === "ASSIGNED") return narrowed.filter((p) => p.billAssignedTo === "VENDOR");
+    if (queue === "NOT_ASSIGNED") return narrowed.filter((p) => p.billAssignedTo !== "VENDOR");
+    return narrowed;
+  }, [narrowed, queue]);
 
-  const totalPages = Math.ceil(visible.length / pageSize);
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
   const paged = useMemo(
     () => visible.slice((currentPage - 1) * pageSize, currentPage * pageSize),
     [visible, currentPage, pageSize],
@@ -288,35 +295,35 @@ export default function OrganisationBillPaymentsPage() {
     selectedCorpId !== "ALL",
     selectedOperator !== "ALL",
     Boolean(consumerNumber.trim()),
-    assignedToFilter !== "ALL",
     selectedAssigneeId !== "ALL",
     amountRangeActive,
   ].filter(Boolean).length;
 
-  const selectedPending = useMemo(
-    () =>
-      Array.from(selectedIds).filter((id) => {
-        const payment = payments.find((p) => p.id === id);
-        return payment?.orgStatus === "PENDING" && payment.billAssignedTo !== "VENDOR";
-      }).length,
-    [selectedIds, payments],
-  );
-  const selectedToVerify = useMemo(
-    () =>
-      Array.from(selectedIds).filter(
-        (id) => payments.find((p) => p.id === id)?.vendorStage === "VENDOR_PAID",
-      ),
-    [selectedIds, payments],
+  const selectableVisible = useMemo(
+    () => visible.filter(isUnpickedRow),
+    [visible],
   );
 
-  const allVisibleSelected =
-    visible.length > 0 && visible.every((p) => selectedIds.has(p.id));
+  const allSelectableSelected =
+    selectableVisible.length > 0 && selectableVisible.every((p) => selectedIds.has(p.id));
+
+  const selectedRows = useMemo(
+    () => payments.filter((p) => selectedIds.has(p.id) && isUnpickedRow(p)),
+    [payments, selectedIds],
+  );
+
+  const currentRole = getUser()?.role;
+  const canMarkInProgress =
+    currentRole === "SUPER_ADMIN" ||
+    currentRole === "ORGANISATION_ADMIN" ||
+    currentRole === "MAKER";
+  const canAssignVendors =
+    currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
 
   function resetFilters() {
     setSelectedCorpId("ALL");
     setSelectedOperator("ALL");
     setConsumerNumber("");
-    setAssignedToFilter("ALL");
     setSelectedAssigneeId("ALL");
     setAmountMin("");
     setAmountMax("");
@@ -324,6 +331,8 @@ export default function OrganisationBillPaymentsPage() {
   }
 
   function toggleSelect(id: string) {
+    const row = payments.find((p) => p.id === id);
+    if (!row || !isUnpickedRow(row)) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -334,8 +343,14 @@ export default function OrganisationBillPaymentsPage() {
 
   function toggleSelectAll() {
     setSelectedIds((prev) => {
-      if (visible.length > 0 && visible.every((p) => prev.has(p.id))) return new Set();
-      return new Set(visible.map((p) => p.id));
+      if (selectableVisible.length > 0 && selectableVisible.every((p) => prev.has(p.id))) {
+        const next = new Set(prev);
+        for (const p of selectableVisible) next.delete(p.id);
+        return next;
+      }
+      const next = new Set(prev);
+      for (const p of selectableVisible) next.add(p.id);
+      return next;
     });
   }
 
@@ -346,19 +361,6 @@ export default function OrganisationBillPaymentsPage() {
       else next.add(id);
       return next;
     });
-  }
-
-  async function pickUp(id: string) {
-    setPickingUpId(id);
-    try {
-      await apiFetch(`/api/v1/paytrix/my-payments/${id}/pick-up`, { method: "POST" });
-      toast.success("Picked up");
-      await load(true);
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Action failed");
-    } finally {
-      setPickingUpId(null);
-    }
   }
 
   function openSettle(payment: BillPaymentRow) {
@@ -401,13 +403,10 @@ export default function OrganisationBillPaymentsPage() {
     }
   }
 
-  async function pickUpSelected() {
-    const ids = Array.from(selectedIds).filter((id) => {
-      const p = payments.find((x) => x.id === id);
-      return p?.orgStatus === "PENDING" && p.billAssignedTo !== "VENDOR";
-    });
+  async function markSelectedInProgress() {
+    const ids = selectedRows.map((p) => p.id);
     if (ids.length === 0) {
-      toast.error("None of the selected bills are awaiting pick-up");
+      toast.error("Select at least one unpicked bill");
       return;
     }
     setBulkPickingUp(true);
@@ -424,15 +423,40 @@ export default function OrganisationBillPaymentsPage() {
     setBulkPickingUp(false);
     setSelectedIds(new Set());
     if (failed === 0) {
-      toast.success(`Picked up ${ok} bill${ok === 1 ? "" : "s"}`);
+      toast.success(
+        ok === 1 ? "1 bill marked in progress" : `Marked ${ok} bills in progress`,
+      );
     } else {
-      toast.error(`Picked up ${ok}, failed ${failed}`);
+      toast.error(`Marked ${ok} in progress, failed ${failed}`);
     }
     await load(true);
   }
 
-  async function openAssign() {
-    const ids = Array.from(selectedIds);
+  async function openAssignModal() {
+    const ids = selectedRows.map((p) => p.id);
+    if (ids.length === 0) return;
+    setAssignMode("manual");
+    setChosenVendorId("");
+    setAssignLines(null);
+    setAssignModalOpen(true);
+    setVendorsLoading(true);
+    try {
+      const clients = await apiFetch<Client[]>("/api/v1/paytrix/clients");
+      setActiveVendors(
+        clients
+          .filter((c) => c.clientType === "VENDOR" && c.status === "ACTIVE")
+          .sort((a, b) => a.clientName.localeCompare(b.clientName)),
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load active vendors");
+      setActiveVendors([]);
+    } finally {
+      setVendorsLoading(false);
+    }
+  }
+
+  async function loadRulesPreview() {
+    const ids = selectedRows.map((p) => p.id);
     if (ids.length === 0) return;
     setPreviewingAssign(true);
     try {
@@ -449,27 +473,65 @@ export default function OrganisationBillPaymentsPage() {
     }
   }
 
+  function closeAssignModal() {
+    if (assigning) return;
+    setAssignModalOpen(false);
+    setAssignLines(null);
+    setChosenVendorId("");
+  }
+
   async function confirmAssign() {
-    if (!assignLines) return;
+    const ids = selectedRows.map((p) => p.id);
+    if (ids.length === 0) return;
+    if (assignMode === "manual" && !chosenVendorId) {
+      toast.error("Select a vendor");
+      return;
+    }
     setAssigning(true);
     try {
-      const result = await apiFetch<AssignmentPlan[]>("/api/v1/paytrix/my-payments/assign", {
-        method: "POST",
-        body: { billPaymentIds: assignLines.map((line) => line.billPaymentId) },
-      });
-      const planned = assignLines.filter((line) => line.willAssign).length;
-      const assigned = result.filter((line) => line.willAssign).length;
-      if (assigned > 0 && assigned === planned) {
-        toast.success(assigned === 1 ? "Bill assigned" : `Assigned ${assigned} bills`);
-        setAssignLines(null);
-        setSelectedIds(new Set());
-      } else if (assigned > 0) {
-        toast.error(`Assigned ${assigned} of ${planned}. The rest no longer match a commission rule.`);
-        setAssignLines(result);
-        setSelectedIds(new Set());
+      if (assignMode === "manual") {
+        const result = await apiFetch<AssignmentPlan[]>("/api/v1/paytrix/my-payments/assign", {
+          method: "POST",
+          body: { billPaymentIds: ids, vendorId: chosenVendorId },
+        });
+        const assigned = result.filter((line) => line.willAssign).length;
+        if (assigned === ids.length) {
+          toast.success(
+            assigned === 1
+              ? `Bill assigned to ${result[0]?.vendorName ?? "vendor"}`
+              : `Assigned ${assigned} bills to ${result[0]?.vendorName ?? "vendor"}`,
+          );
+          setAssignModalOpen(false);
+          setChosenVendorId("");
+          setSelectedIds(new Set());
+        } else if (assigned > 0) {
+          toast.error(`Assigned ${assigned} of ${ids.length} bills.`);
+          setAssignModalOpen(false);
+          setSelectedIds(new Set());
+        } else {
+          toast.error(result[0]?.reason ?? "Could not assign selected bills");
+        }
       } else {
-        toast.error("No selected bill matches a commission rule");
-        setAssignLines(result);
+        if (!assignLines) return;
+        const result = await apiFetch<AssignmentPlan[]>("/api/v1/paytrix/my-payments/assign", {
+          method: "POST",
+          body: { billPaymentIds: assignLines.map((line) => line.billPaymentId) },
+        });
+        const planned = assignLines.filter((line) => line.willAssign).length;
+        const assigned = result.filter((line) => line.willAssign).length;
+        if (assigned > 0 && assigned === planned) {
+          toast.success(assigned === 1 ? "Bill assigned" : `Assigned ${assigned} bills`);
+          setAssignModalOpen(false);
+          setAssignLines(null);
+          setSelectedIds(new Set());
+        } else if (assigned > 0) {
+          toast.error(`Assigned ${assigned} of ${planned}. The rest no longer match a commission rule.`);
+          setAssignLines(result);
+          setSelectedIds(new Set());
+        } else {
+          toast.error("No selected bill matches a commission rule");
+          setAssignLines(result);
+        }
       }
       await load(true);
     } catch (err) {
@@ -663,34 +725,6 @@ export default function OrganisationBillPaymentsPage() {
     }
   }
 
-  async function exportSelected() {
-    if (selectedIds.size === 0) return;
-    setExporting(true);
-    try {
-      const params = Array.from(selectedIds).map((id) => `ids=${id}`).join("&");
-      const response = await trackedFetch(
-        `${API_BASE_URL}/api/v1/paytrix/my-payments/export?${params}`,
-        { headers: { Authorization: `Bearer ${getToken()}` } },
-      );
-      if (!response.ok) {
-        throw new Error(
-          await extractErrorMessage(response, `Export failed with status ${response.status}`),
-        );
-      }
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "bill-payments.xlsx";
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Export failed");
-    } finally {
-      setExporting(false);
-    }
-  }
-
   async function uploadImport(file: File) {
     setImporting(true);
     try {
@@ -738,7 +772,7 @@ export default function OrganisationBillPaymentsPage() {
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <PageHeader
         title="Bill Payments"
-        description="Every bill payment made by corporates, fetched directly from the bill payment table."
+        description="Bills paid by corporates that are awaiting vendor or Paytrix settlement."
         actions={
           <>
             <Button
@@ -834,15 +868,6 @@ export default function OrganisationBillPaymentsPage() {
               }}
             />
           )}
-          {assignedToFilter !== "ALL" && (
-            <FilterChip
-              label={assignedToFilter === "VENDOR" ? "Assigned: Vendor" : "Assigned: Paytrix"}
-              onClear={() => {
-                setAssignedToFilter("ALL");
-                setCurrentPage(1);
-              }}
-            />
-          )}
           {selectedAssigneeId !== "ALL" && (
             <FilterChip
               label={vendorLabel ?? selectedAssigneeId}
@@ -892,72 +917,48 @@ export default function OrganisationBillPaymentsPage() {
           </div>
         </div>
 
-        {selectedIds.size > 0 && (
+        {selectedRows.length > 0 && (
           <div className="flex shrink-0 flex-col gap-3 border-b border-slate-200 bg-indigo-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-semibold text-slate-800">
-              {selectedIds.size} selected
-              {selectedPending > 0 && (
-                <span className="font-medium text-slate-500">
-                  {" "}
-                  · {selectedPending} awaiting pick-up
-                </span>
-              )}
+              {selectedRows.length} {selectedRows.length === 1 ? "bill" : "bills"} selected
+              <span className="ml-2 font-mono text-xs font-semibold text-indigo-700">
+                ({inr(selectedRows.reduce((sum, r) => sum + r.billAmount, 0))})
+              </span>
             </p>
-            <div className="flex flex-wrap gap-2">
-              {(getUser()?.role === "SUPER_ADMIN" ||
-                getUser()?.role === "ORGANISATION_ADMIN") && (
-                <Button
-                  size="sm"
-                  icon={<UserPlus size={14} />}
-                  loading={previewingAssign}
-                  onClick={openAssign}
-                >
-                  Assign
-                </Button>
-              )}
-              {(getUser()?.role === "SUPER_ADMIN" ||
-                getUser()?.role === "ORGANISATION_ADMIN" ||
-                getUser()?.role === "MAKER") && (
-                <Button
-                  size="sm"
-                  icon={<PackageCheck size={14} />}
-                  loading={bulkPickingUp}
-                  disabled={selectedPending === 0}
-                  onClick={pickUpSelected}
-                >
-                  Pick up {selectedPending > 0 ? selectedPending : ""}
-                </Button>
-              )}
-              {(getUser()?.role === "SUPER_ADMIN" ||
-                getUser()?.role === "ORGANISATION_ADMIN" ||
-                getUser()?.role === "CHECKER") &&
-                selectedToVerify.length > 0 && (
-                  <Button
-                    size="sm"
-                    icon={<ShieldCheck size={14} />}
-                    onClick={() => openVerify(selectedToVerify)}
-                  >
-                    Verify {selectedToVerify.length}
-                  </Button>
-                )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                icon={<PackageCheck size={14} />}
+                loading={bulkPickingUp}
+                disabled={!canMarkInProgress}
+                onClick={markSelectedInProgress}
+              >
+                Mark In Progress
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
-                icon={<Download size={14} />}
-                loading={exporting}
-                onClick={exportSelected}
+                icon={<UserPlus size={14} />}
+                disabled={!canAssignVendors || bulkPickingUp}
+                onClick={openAssignModal}
               >
-                Download Excel
+                Assign To Vendors
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
-                Clear
+              <Button
+                size="sm"
+                variant="outline"
+                icon={<Zap size={14} />}
+                disabled
+                title="Direct payment via BBPS API coming soon"
+              >
+                Direct Pay
               </Button>
             </div>
           </div>
         )}
 
         {loading ? (
-          <TableSkeleton cols={8} />
+          <TableSkeleton cols={9} />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -973,19 +974,24 @@ export default function OrganisationBillPaymentsPage() {
             <Table>
               <THead
                 columns={[
-                  <input
-                    key="select-all"
-                    type="checkbox"
-                    aria-label="Select all visible payments"
-                    checked={allVisibleSelected}
-                    onChange={toggleSelectAll}
-                    className="h-4 w-4 rounded border-slate-300"
-                  />,
+                  selectableVisible.length > 0 ? (
+                    <input
+                      key="select-all"
+                      type="checkbox"
+                      aria-label="Select all unpicked payments"
+                      checked={allSelectableSelected}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                  ) : (
+                    ""
+                  ),
                   "Bill Code",
                   "Operator",
                   "Consumer",
                   "Amount",
-                  "Status",
+                  "Bill Status",
+                  "Vendor Status",
                   "Corp Paid On",
                   "",
                 ]}
@@ -993,17 +999,21 @@ export default function OrganisationBillPaymentsPage() {
               <TBody>
                 {paged.map((p) => {
                   const expanded = expandedIds.has(p.id);
+                  const vendorBadge = vendorStatusBadge(p);
+                  const selectable = isUnpickedRow(p);
                   return (
                     <Fragment key={p.id}>
                       <TR className="cursor-pointer" onClick={() => toggleExpand(p.id)}>
-                        <TD onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            aria-label={`Select payment ${p.id}`}
-                            checked={selectedIds.has(p.id)}
-                            onChange={() => toggleSelect(p.id)}
-                            className="h-4 w-4 rounded border-slate-300"
-                          />
+                        <TD className="w-10" onClick={(e) => e.stopPropagation()}>
+                          {selectable && (
+                            <input
+                              type="checkbox"
+                              aria-label={`Select payment ${p.id}`}
+                              checked={selectedIds.has(p.id)}
+                              onChange={() => toggleSelect(p.id)}
+                              className="h-4 w-4 rounded border-slate-300"
+                            />
+                          )}
                         </TD>
                         <TD onClick={(e) => e.stopPropagation()}>
                           {p.billId ? (
@@ -1052,14 +1062,10 @@ export default function OrganisationBillPaymentsPage() {
                           {inr(p.billAmount)}
                         </TD>
                         <TD>
-                          <StatusBadge
-                            status={p.awaitingChecker ? "AWAITING_CHECKER" : p.orgStatus}
-                          />
-                          {stageLabel(p.vendorStage) && (
-                            <p className="mt-1 text-[11px] font-medium text-indigo-700">
-                              {stageLabel(p.vendorStage)}
-                            </p>
-                          )}
+                          <StatusBadge status={billStatusOf(p)} />
+                        </TD>
+                        <TD>
+                          <StatusBadge status={vendorBadge.status} label={vendorBadge.label} />
                         </TD>
                         <TD className="text-xs text-slate-500">
                           {formatDateTime(p.corpPaymentOn)}
@@ -1069,8 +1075,6 @@ export default function OrganisationBillPaymentsPage() {
                             <div onClick={(e) => e.stopPropagation()}>
                               <RowAction
                                 payment={p}
-                                loading={pickingUpId === p.id}
-                                onPickUp={() => pickUp(p.id)}
                                 onSettle={() => openSettle(p)}
                                 onVerify={() => openVerify([p.id])}
                               />
@@ -1083,7 +1087,7 @@ export default function OrganisationBillPaymentsPage() {
                       </TR>
                       {expanded && (
                         <TR className="hover:bg-transparent">
-                          <TD colSpan={8} className="bg-slate-50 px-4 py-3 whitespace-normal!">
+                          <TD colSpan={9} className="bg-slate-50 px-4 py-3 whitespace-normal!">
                             <PaymentDetail
                               payment={p}
                               copiedKey={copiedKey}
@@ -1115,63 +1119,151 @@ export default function OrganisationBillPaymentsPage() {
       </ListCard>
 
       <Modal
-        open={assignLines != null}
-        onClose={assigning ? () => undefined : () => setAssignLines(null)}
+        open={assignModalOpen}
+        onClose={closeAssignModal}
         dismissable={!assigning}
         size="xl"
         title={
-          assignableCount === 0
-            ? "These bills cannot be assigned"
-            : assignableCount === 1
-              ? "Assign this bill?"
-              : `Assign ${assignableCount} bills?`
+          selectedRows.length === 1
+            ? "Assign bill to vendor"
+            : `Assign ${selectedRows.length} bills to vendor`
         }
-        description="A bill moves only when an approved commission covers its biller and amount. The vendor is the one with the highest rate."
+        description="Choose a vendor manually or match bills automatically using approved Vendor Rules."
         footer={
           <>
-            <Button variant="outline" disabled={assigning} onClick={() => setAssignLines(null)}>
+            <Button variant="outline" disabled={assigning} onClick={closeAssignModal}>
               Cancel
             </Button>
             <Button
               loading={assigning}
-              disabled={assignableCount === 0}
+              disabled={
+                assignMode === "manual"
+                  ? !chosenVendorId || selectedRows.length === 0
+                  : assignableCount === 0 || previewingAssign
+              }
               onClick={confirmAssign}
             >
-              {assignableCount === 0
-                ? "Assign"
-                : assignableCount === 1
+              {assignMode === "manual"
+                ? selectedRows.length === 1
                   ? "Assign bill"
-                  : `Assign ${assignableCount} bills`}
+                  : `Assign ${selectedRows.length} bills`
+                : assignableCount === 0
+                  ? "Assign"
+                  : assignableCount === 1
+                    ? "Assign bill"
+                    : `Assign ${assignableCount} bills`}
             </Button>
           </>
         }
       >
-        <ul className="flex max-h-80 flex-col gap-2 overflow-auto">
-          {assignLines?.map((line) => (
-            <li key={line.billPaymentId} className="rounded-xl border border-slate-200 px-3 py-2.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{line.billerName}</p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    <span className="font-mono">{line.consumerNumber}</span>
-                    {line.corporateName ? ` · ${line.corporateName}` : ""}
-                  </p>
-                </div>
-                <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
-                  {inr(line.amount)}
-                </p>
-              </div>
-              {line.willAssign ? (
-                <p className="mt-2 text-sm font-medium text-indigo-700">
-                  {line.vendorName} at{" "}
-                  {line.commissionPercent == null ? "—" : commissionLabel(line.commissionPercent)}
-                </p>
-              ) : (
-                <p className="mt-2 text-sm text-slate-600">{line.reason}</p>
+        <div className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setAssignMode("manual")}
+              className={cn(
+                "min-h-10 rounded-lg text-xs font-semibold transition-colors",
+                assignMode === "manual"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800",
               )}
-            </li>
-          ))}
-        </ul>
+            >
+              Select vendor manually
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAssignMode("rules");
+                if (assignLines == null && !previewingAssign) {
+                  void loadRulesPreview();
+                }
+              }}
+              className={cn(
+                "min-h-10 rounded-lg text-xs font-semibold transition-colors",
+                assignMode === "rules"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-800",
+              )}
+            >
+              Auto-match by Vendor Rules
+            </button>
+          </div>
+
+          {assignMode === "manual" ? (
+            <>
+              <SearchableSelect
+                label="Vendor"
+                required
+                disabled={vendorsLoading || assigning}
+                value={chosenVendorId}
+                onChange={setChosenVendorId}
+                placeholder={
+                  vendorsLoading
+                    ? "Loading active vendors..."
+                    : activeVendors.length === 0
+                      ? "No active vendors available"
+                      : "Select an active vendor..."
+                }
+                searchPlaceholder="Search vendors by name or code..."
+                options={activeVendors.map((v) => ({
+                  value: v.id,
+                  label: v.clientName,
+                  sublabel: v.clientCode ?? v.id,
+                }))}
+              />
+
+              <ul className="flex max-h-72 flex-col gap-2 overflow-auto">
+                {selectedRows.map((row) => (
+                  <li key={row.id} className="rounded-xl border border-slate-200 px-3 py-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {row.operatorName || "Bill"}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          <span className="font-mono">{row.consumerId ?? "—"}</span>
+                          {row.corpName ? ` · ${row.corpName}` : ""}
+                        </p>
+                      </div>
+                      <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
+                        {inr(row.billAmount)}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : previewingAssign ? (
+            <p className="py-6 text-center text-sm text-slate-500">Checking commission rules…</p>
+          ) : (
+            <ul className="flex max-h-80 flex-col gap-2 overflow-auto">
+              {assignLines?.map((line) => (
+                <li key={line.billPaymentId} className="rounded-xl border border-slate-200 px-3 py-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{line.billerName}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        <span className="font-mono">{line.consumerNumber}</span>
+                        {line.corporateName ? ` · ${line.corporateName}` : ""}
+                      </p>
+                    </div>
+                    <p className="shrink-0 font-mono text-sm font-semibold text-slate-900">
+                      {inr(line.amount)}
+                    </p>
+                  </div>
+                  {line.willAssign ? (
+                    <p className="mt-2 text-sm font-medium text-indigo-700">
+                      {line.vendorName} at{" "}
+                      {line.commissionPercent == null ? "—" : commissionLabel(line.commissionPercent)}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-sm text-slate-600">{line.reason}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </Modal>
 
       <Modal
@@ -1487,18 +1579,6 @@ export default function OrganisationBillPaymentsPage() {
             }}
             placeholder="e.g. 100234567"
           />
-          <SelectField
-            label="Assigned to"
-            value={assignedToFilter}
-            onChange={(e) => {
-              setAssignedToFilter(e.target.value as "ALL" | "ORG" | "VENDOR");
-              setCurrentPage(1);
-            }}
-          >
-            <option value="ALL">All</option>
-            <option value="ORG">Paytrix (Platform)</option>
-            <option value="VENDOR">Vendor</option>
-          </SelectField>
           {vendorOptions.length > 0 && (
             <SelectField
               label="Vendor"
@@ -1548,29 +1628,49 @@ export default function OrganisationBillPaymentsPage() {
   );
 }
 
-function stageLabel(stage: VendorStage | null | undefined) {
-  if (stage === "ASSIGNED") return "Waiting on the vendor";
-  if (stage === "IN_PROGRESS") return "Vendor is paying";
-  if (stage === "VENDOR_PAID") return "Needs verification";
-  if (stage === "VERIFIED" || stage === "REIMBURSED") return "Verified";
-  return null;
+function isUnpickedRow(payment: BillPaymentRow): boolean {
+  return payment.billAssignedTo !== "VENDOR" && payment.orgStatus === "PENDING";
+}
+
+function billStatusOf(payment: BillPaymentRow): string {
+  if (payment.billAssignedTo === "VENDOR") {
+    return payment.verified ? "PAID" : "PENDING";
+  }
+  return payment.awaitingChecker ? "AWAITING_CHECKER" : payment.orgStatus;
+}
+
+function vendorStatusBadge(payment: BillPaymentRow): { status: string; label: string } {
+  if (payment.billAssignedTo !== "VENDOR") {
+    return { status: "NOT_ASSIGNED", label: "Not assigned" };
+  }
+  if (
+    payment.billPaidOn != null ||
+    payment.verified ||
+    payment.vendorStage === "VENDOR_PAID" ||
+    payment.vendorStage === "VERIFIED" ||
+    payment.vendorStage === "REIMBURSED"
+  ) {
+    return { status: "PAID", label: "Assigned & Paid" };
+  }
+  if (
+    payment.billAssignedToStatus === "IN_PROGRESS" ||
+    payment.vendorStage === "IN_PROGRESS"
+  ) {
+    return { status: "IN_PROGRESS", label: "Assigned & In Progress" };
+  }
+  return { status: "PENDING", label: "Assigned & Pending" };
 }
 
 function RowAction({
   payment,
-  loading,
-  onPickUp,
   onSettle,
   onVerify,
 }: {
   payment: BillPaymentRow;
-  loading: boolean;
-  onPickUp: () => void;
   onSettle: () => void;
   onVerify: () => void;
 }) {
   const role = getUser()?.role;
-  const canPickUp = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN" || role === "MAKER";
   const canVerify = role === "SUPER_ADMIN" || role === "ORGANISATION_ADMIN" || role === "CHECKER";
 
   if (payment.vendorStage === "VENDOR_PAID" && canVerify) {
@@ -1583,17 +1683,10 @@ function RowAction({
   if (payment.billAssignedTo === "VENDOR") {
     return null;
   }
-  if (payment.orgStatus === "PENDING" && canPickUp) {
-    return (
-      <Button size="sm" icon={<PackageCheck size={14} />} loading={loading} onClick={onPickUp}>
-        Pick up
-      </Button>
-    );
-  }
   if (payment.orgStatus === "IN_PROCESS" && payment.canSettle) {
     return (
       <Button size="sm" onClick={onSettle}>
-        Record settlement
+        Pay
       </Button>
     );
   }
@@ -1634,43 +1727,6 @@ function PaymentDetail({
           onCopy={() => onCopy(`vendor:${payment.id}`, payment.billAssignedToId, "assignee ID")}
         />
         <DetailField label="Bill Fetched On" value={formatDateTime(payment.billFetchedOn)} />
-        <DetailField
-          label="Bill Code"
-          value={payment.billId ?? "—"}
-          mono
-          copied={copiedKey === `bid:${payment.id}`}
-          onCopy={
-            payment.billId
-              ? () => onCopy(`bid:${payment.id}`, payment.billId!, "bill code")
-              : undefined
-          }
-        />
-        <DetailField label="Operator" value={payment.operatorName ?? "—"} />
-        <DetailField
-          label="Consumer ID"
-          value={payment.consumerId ?? "—"}
-          mono
-          copied={copiedKey === `cid:${payment.id}`}
-          onCopy={
-            payment.consumerId
-              ? () => onCopy(`cid:${payment.id}`, payment.consumerId!, "consumer ID")
-              : undefined
-          }
-        />
-        <DetailField
-          label="Payment ID"
-          value={payment.id}
-          mono
-          copied={copiedKey === `pid:${payment.id}`}
-          onCopy={() => onCopy(`pid:${payment.id}`, payment.id, "payment ID")}
-        />
-        <DetailField
-          label="Bill Fetch ID"
-          value={payment.billFetchId}
-          mono
-          copied={copiedKey === `fid:${payment.id}`}
-          onCopy={() => onCopy(`fid:${payment.id}`, payment.billFetchId, "bill fetch ID")}
-        />
         <DetailField label="Corp Paid User ID" value={payment.corpPaidUserId ?? "—"} mono />
         <DetailField label="Corp Payment Status" value={payment.corpPaymentStatus} />
         <DetailField label="Assigned Status" value={payment.billAssignedToStatus} />

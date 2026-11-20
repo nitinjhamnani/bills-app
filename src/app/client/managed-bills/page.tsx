@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Download, FileText, Plus, Search, Upload } from "lucide-react";
+import { Check, ChevronRight, Copy, Download, FileText, Plus, Search, Upload } from "lucide-react";
 import { apiFetch, ApiError, extractErrorMessage, trackedFetch } from "@/lib/api-client";
 import { getToken, getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { StatusBadge } from "@/components/StatusBadge";
-import { userInitials } from "@/components/UserMenu";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ListCard } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -84,6 +83,18 @@ export default function ManagedBillsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<BillFilter>("ALL");
   const [search, setSearch] = useState("");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  async function copyText(key: string, text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      toast.success(`Copied ${text}`);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      toast.error(`Could not copy ${label}`);
+    }
+  }
 
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -302,7 +313,13 @@ export default function ManagedBillsPage() {
           />
         ) : (
           <Table>
-            <THead columns={chooseBranch ? ["Branch", "Biller", "Customer", "Amount", "Status", "Due", ""] : ["Biller", "Customer", "Amount", "Status", "Due", ""]} />
+            <THead
+              columns={
+                chooseBranch
+                  ? ["Branch", "Biller", "Consumer", "Amount", "Status", "Due date", "Last fetch", ""]
+                  : ["Biller", "Consumer", "Amount", "Status", "Due date", "Last fetch", ""]
+              }
+            />
             <TBody>
               {visible.map((bill) => (
                 <TR
@@ -312,22 +329,33 @@ export default function ManagedBillsPage() {
                 >
                   {chooseBranch && <TD className="font-medium text-slate-800">{bill.branchName ?? "—"}</TD>}
                   <TD>
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
-                        {userInitials(bill.billerName)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900">{bill.billerName}</p>
-                        <p className="text-[11px] text-slate-400">
-                          {CATEGORY_LABELS[bill.billServiceCode] ?? bill.billServiceName}
-                        </p>
-                      </div>
-                    </div>
+                    <p className="font-semibold text-slate-900">{bill.billerName}</p>
+                    <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                      {CATEGORY_LABELS[bill.billServiceCode] ?? bill.billServiceName}
+                    </p>
                   </TD>
-                  <TD>
-                    <p className="font-medium text-slate-800">{bill.customerName ?? "—"}</p>
-                    <p className="font-mono text-[11px] text-slate-400">
-                      {bill.customerBillAccountNumber}
+                  <TD onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      title="Copy consumer ID"
+                      onClick={() =>
+                        void copyText(
+                          `consumer:${bill.id}`,
+                          bill.customerBillAccountNumber,
+                          "consumer ID",
+                        )
+                      }
+                      className="group -ml-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-xs font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                    >
+                      <span>{bill.customerBillAccountNumber}</span>
+                      {copiedKey === `consumer:${bill.id}` ? (
+                        <Check size={12} className="text-emerald-600" />
+                      ) : (
+                        <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                      )}
+                    </button>
+                    <p className="mt-0.5 text-[11px] font-medium text-slate-500">
+                      {bill.customerName ?? "—"}
                     </p>
                   </TD>
                   <TD className="font-mono text-sm font-semibold text-slate-900">
@@ -341,15 +369,17 @@ export default function ManagedBillsPage() {
                       )}
                     </div>
                   </TD>
-                  <TD>
-                    <p className="text-slate-700">{formatDate(bill.dueDate)}</p>
-                    <p className="text-[11px] text-slate-400">
-                      {bill.lastFetchFailed
-                        ? "Fetch failed"
-                        : bill.lastFetchAt
-                          ? formatWhen(bill.lastFetchAt)
-                          : "Not fetched"}
-                    </p>
+                  <TD className="text-xs font-medium text-slate-700">
+                    {formatDate(bill.dueDate)}
+                  </TD>
+                  <TD className="text-xs text-slate-500">
+                    {bill.lastFetchFailed ? (
+                      <span className="font-medium text-rose-600">Fetch failed</span>
+                    ) : bill.lastFetchAt ? (
+                      formatWhen(bill.lastFetchAt)
+                    ) : (
+                      "Not fetched"
+                    )}
                   </TD>
                   <TD>
                     <ChevronRight size={16} className="ml-auto text-slate-300" />

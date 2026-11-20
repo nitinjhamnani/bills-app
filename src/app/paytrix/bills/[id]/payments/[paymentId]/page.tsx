@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, History } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Copy, History } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -61,6 +61,7 @@ export default function PaytrixBillPaymentDetailsPage() {
 
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [disputeModalOpen, setDisputeModalOpen] = useState(false);
+  const [copiedConsumerId, setCopiedConsumerId] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -156,17 +157,21 @@ export default function PaytrixBillPaymentDetailsPage() {
                 <h1 className="truncate text-lg font-semibold tracking-tight text-slate-900">
                   {payment.billerName}
                 </h1>
-                <p className="mt-0.5 truncate text-xs text-slate-500">
-                  {payment.customerName ?? "—"} · {payment.customerBillAccountNumber}
+                <p className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                  {payment.billServiceName}
                 </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
-                {inr(payment.amount)}
-              </p>
+              {payment.billStatus !== "FAILED" && (
+                <p className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
+                  {inr(payment.amount)}
+                </p>
+              )}
               <StatusBadge status={payment.billStatus} />
-              <StatusBadge status={payment.paymentStatus} />
+              {payment.paymentStatus !== payment.billStatus && (
+                <StatusBadge status={payment.paymentStatus} />
+              )}
               {payment.billStatus === "PAID" &&
                 (openDispute ? (
                   <span className="text-xs font-medium text-amber-700">Under review</span>
@@ -190,11 +195,37 @@ export default function PaytrixBillPaymentDetailsPage() {
               This cycle
             </h2>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
-              <InfoField label="Bill number" value={payment.billNumber ?? "—"} />
+              <InfoField
+                label="Consumer number"
+                value={
+                  <button
+                    type="button"
+                    title="Copy consumer number"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(payment.customerBillAccountNumber);
+                        setCopiedConsumerId(true);
+                        toast.success(`Copied ${payment.customerBillAccountNumber}`);
+                        setTimeout(() => setCopiedConsumerId(false), 1500);
+                      } catch {
+                        toast.error("Could not copy consumer number");
+                      }
+                    }}
+                    className="group -ml-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                  >
+                    <span>{payment.customerBillAccountNumber}</span>
+                    {copiedConsumerId ? (
+                      <Check size={12} className="text-emerald-600" />
+                    ) : (
+                      <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                    )}
+                  </button>
+                }
+              />
+              <InfoField label="Customer" value={payment.customerName ?? "—"} />
               <InfoField label="Period" value={payment.billPeriod ?? "—"} />
               <InfoField label="Bill date" value={formatDate(payment.billDate)} />
               <InfoField label="Due date" value={formatDate(payment.dueDate)} />
-              <InfoField label="Amount" value={inr(payment.amount)} />
               <InfoField label="Bill type" value={payment.billType ?? "—"} />
               <InfoField
                 label="Paid by client"

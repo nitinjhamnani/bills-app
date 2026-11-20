@@ -2,7 +2,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, ListTree, RotateCcw, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Calendar,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Copy,
+  GitBranch,
+  ListTree,
+  RotateCcw,
+  Search,
+  UserRound,
+} from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { getUser } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -71,6 +84,14 @@ function InfoField({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
+function creatorRoleLabel(role: string | null | undefined) {
+  if (role === "CORP_ADMIN") return "Corporate Admin";
+  if (role === "BRANCH_USER" || role === "CORP_OPERATOR") return "Branch User";
+  if (role === "SUPER_ADMIN") return "Super Admin";
+  if (role === "ORGANISATION_ADMIN") return "Paytrix Admin";
+  return role || null;
+}
+
 function cycleBucket(payment: BillPayment): Exclude<CycleFilter, "ALL"> | "OTHER" {
   if (payment.billStatus === "FAILED") return "FAILED";
   if (payment.billStatus === "DUE") return "DUE";
@@ -94,6 +115,8 @@ export default function ManagedBillDetailsPage() {
   const [retrying, setRetrying] = useState(false);
   const [filter, setFilter] = useState<CycleFilter>("ALL");
   const [search, setSearch] = useState("");
+  const [copiedCreatorId, setCopiedCreatorId] = useState(false);
+  const [copiedConsumerId, setCopiedConsumerId] = useState(false);
 
   const [autoFetchEnabled, setAutoFetchEnabled] = useState(false);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
@@ -262,36 +285,100 @@ export default function ManagedBillDetailsPage() {
         </div>
       ) : (
         <>
-          <div className="flex shrink-0 flex-col gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-xs sm:flex-row sm:items-center sm:justify-between sm:px-5">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                {userInitials(bill.billerName)}
-              </span>
-              <div className="min-w-0">
-                <h1 className="truncate text-lg font-semibold tracking-tight text-slate-900">
-                  {bill.billerName}
-                </h1>
-                <p className="mt-0.5 truncate text-xs text-slate-500">
-                  {bill.customerName ?? "—"} · {bill.customerBillAccountNumber}
-                </p>
+          <div className="flex shrink-0 flex-col gap-3.5 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-xs sm:px-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
+                  {userInitials(bill.billerName)}
+                </span>
+                <div className="min-w-0">
+                  <h1 className="truncate text-lg font-semibold tracking-tight text-slate-900">
+                    {bill.billerName}
+                  </h1>
+                  <p className="mt-0.5 truncate text-xs font-medium text-slate-500">
+                    {CATEGORY_LABELS[bill.billServiceCode] ?? bill.billServiceName}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {bill.amount != null && !bill.lastFetchFailed && bill.billStatus !== "FAILED" && (
+                  <p className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
+                    {inr(bill.amount)}
+                  </p>
+                )}
+                <StatusBadge status={bill.lastFetchFailed ? "FAILED" : bill.billStatus} />
+                {!bill.lastFetchFailed &&
+                  bill.billStatus !== "FAILED" &&
+                  bill.paymentStatus !== bill.billStatus && (
+                    <StatusBadge status={bill.paymentStatus} />
+                  )}
+                {(bill.billStatus === "FAILED" || bill.lastFetchFailed) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={<RotateCcw size={14} />}
+                    loading={retrying}
+                    onClick={retryFetch}
+                  >
+                    Retry fetch
+                  </Button>
+                )}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <p className="font-mono text-2xl font-semibold tracking-tight text-slate-900">
-                {bill.amount != null ? inr(bill.amount) : "—"}
-              </p>
-              <StatusBadge status={bill.billStatus} />
-              <StatusBadge status={bill.paymentStatus} />
-              {(bill.billStatus === "FAILED" || bill.lastFetchFailed) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={<RotateCcw size={14} />}
-                  loading={retrying}
-                  onClick={retryFetch}
-                >
-                  Retry fetch
-                </Button>
+
+            <div className="flex flex-col gap-2.5 border-t border-slate-100 pt-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs font-medium text-slate-600">
+                {(bill.createdByName || bill.createdByUserId) && (
+                  <div className="inline-flex flex-wrap items-center gap-1.5">
+                    <UserRound size={13.5} className="text-slate-400" />
+                    <span className="text-slate-500">Created by</span>
+                    {bill.createdByName && (
+                      <span className="font-semibold text-slate-800">{bill.createdByName}</span>
+                    )}
+                    {creatorRoleLabel(bill.createdByRole) && (
+                      <span className="inline-flex items-center rounded-md border border-indigo-100 bg-indigo-50/80 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700">
+                        {creatorRoleLabel(bill.createdByRole)}
+                      </span>
+                    )}
+                    {bill.createdByUserId && (
+                      <button
+                        type="button"
+                        title="Copy creator user ID"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(bill.createdByUserId!);
+                            setCopiedCreatorId(true);
+                            toast.success(`Copied ${bill.createdByUserId}`);
+                            setTimeout(() => setCopiedCreatorId(false), 1500);
+                          } catch {
+                            toast.error("Could not copy user ID");
+                          }
+                        }}
+                        className="group inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 bg-slate-100/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-700 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+                      >
+                        <span>{bill.createdByUserId}</span>
+                        {copiedCreatorId ? (
+                          <Check size={11} className="text-emerald-600" />
+                        ) : (
+                          <Copy size={11} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {bill.branchName && (
+                  <span className="inline-flex items-center gap-1.5 text-slate-600">
+                    <GitBranch size={13} className="text-indigo-500" />
+                    <span className="font-semibold text-slate-700">{bill.branchName}</span>
+                  </span>
+                )}
+              </div>
+
+              {bill.createdAt && (
+                <div className="flex shrink-0 items-center gap-1.5 self-end text-xs font-medium text-slate-400 sm:self-auto">
+                  <Calendar size={13} className="text-slate-400" />
+                  <span>Created on {formatWhen(bill.createdAt)}</span>
+                </div>
               )}
             </div>
           </div>
@@ -338,14 +425,34 @@ export default function ManagedBillDetailsPage() {
             <h2 className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Bill</h2>
             <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 sm:grid-cols-3">
               <InfoField
-                label="Category"
-                value={CATEGORY_LABELS[bill.billServiceCode] ?? bill.billServiceName}
+                label="Consumer number"
+                value={
+                  <button
+                    type="button"
+                    title="Copy consumer number"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(bill.customerBillAccountNumber);
+                        setCopiedConsumerId(true);
+                        toast.success(`Copied ${bill.customerBillAccountNumber}`);
+                        setTimeout(() => setCopiedConsumerId(false), 1500);
+                      } catch {
+                        toast.error("Could not copy consumer number");
+                      }
+                    }}
+                    className="group -ml-1.5 inline-flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-0.5 font-mono text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100 hover:text-indigo-700"
+                  >
+                    <span>{bill.customerBillAccountNumber}</span>
+                    {copiedConsumerId ? (
+                      <Check size={12} className="text-emerald-600" />
+                    ) : (
+                      <Copy size={12} className="text-slate-400 transition-colors group-hover:text-indigo-600" />
+                    )}
+                  </button>
+                }
               />
-              <InfoField label="Biller" value={bill.billerName} />
-              <InfoField label="Consumer number" value={bill.customerBillAccountNumber} />
               <InfoField label="Customer" value={bill.customerName ?? "—"} />
               <InfoField label="Mobile" value={bill.customerMobileNumber ?? "—"} />
-              <InfoField label="Bill number" value={bill.billNumber ?? "—"} />
               <InfoField label="Period" value={bill.billPeriod ?? "—"} />
               <InfoField label="Bill date" value={formatDate(bill.billDate)} />
               <InfoField label="Due date" value={formatDate(bill.dueDate)} />
@@ -357,7 +464,6 @@ export default function ManagedBillDetailsPage() {
                 label="Fetch"
                 value={bill.lastFetchFailed ? (bill.lastFetchFailureReason ?? "Failed") : "OK"}
               />
-              <InfoField label="Amount" value={bill.amount != null ? inr(bill.amount) : "—"} />
             </dl>
             {bill.amountBreakdown.length > 0 && (
               <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-slate-100 pt-4 sm:grid-cols-3">
@@ -407,7 +513,7 @@ export default function ManagedBillDetailsPage() {
                     type="search"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search bill number, due date, or amount"
+                    placeholder="Search due date or amount"
                     className={searchClass}
                   />
                 </div>
@@ -454,7 +560,9 @@ export default function ManagedBillDetailsPage() {
                           <TD>
                             <div className="flex flex-wrap items-center gap-1.5">
                               <StatusBadge status={payment.billStatus} />
-                              <StatusBadge status={payment.paymentStatus} />
+                              {payment.paymentStatus !== payment.billStatus && (
+                                <StatusBadge status={payment.paymentStatus} />
+                              )}
                             </div>
                           </TD>
                           <TD onClick={(e) => e.stopPropagation()}>
