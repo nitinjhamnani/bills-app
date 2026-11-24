@@ -13,6 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Field } from "@/components/ui/Field";
 import { ReasonModal } from "@/components/ui/ReasonModal";
 import { useToast } from "@/components/ui/Toast";
+import { DirectPayModal } from "@/components/DirectPayModal";
 import type { BillPayment } from "@/lib/types";
 
 export default function OrganisationMyPaymentDetailsPage() {
@@ -24,6 +25,7 @@ export default function OrganisationMyPaymentDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [directPayOpen, setDirectPayOpen] = useState(false);
   const [markFailedOpen, setMarkFailedOpen] = useState(false);
   const [bbpsTxn, setBbpsTxn] = useState("");
   const [externalTxn, setExternalTxn] = useState("");
@@ -54,6 +56,20 @@ export default function OrganisationMyPaymentDetailsPage() {
       await load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function payWithBbps() {
+    setBusy(true);
+    try {
+      await apiFetch(`/api/v1/paytrix/my-payments/${billPaymentId}/pay-bbps`, { method: "POST" });
+      toast.success("Bill paid through BBPS");
+      setDirectPayOpen(false);
+      await load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Direct Pay failed");
     } finally {
       setBusy(false);
     }
@@ -124,9 +140,12 @@ export default function OrganisationMyPaymentDetailsPage() {
                   Pick up
                 </Button>
               )}
-            {payment.orgStatus === "IN_PROCESS" && payment.canSettle && (
+            {payment.orgStatus === "IN_PROCESS" && payment.canSettle && !payment.assignedVendorClientId && (
               <>
                 <Button onClick={() => setMarkPaidOpen(true)}>Mark paid</Button>
+                <Button variant="outline" loading={busy} onClick={() => setDirectPayOpen(true)}>
+                  Direct Pay
+                </Button>
                 <Button variant="danger" onClick={() => setMarkFailedOpen(true)}>
                   Mark failed
                 </Button>
@@ -189,6 +208,27 @@ export default function OrganisationMyPaymentDetailsPage() {
         danger
         onCancel={() => setMarkFailedOpen(false)}
         onConfirm={markFailed}
+      />
+
+      <DirectPayModal
+        open={directPayOpen}
+        bills={
+          payment
+            ? [
+                {
+                  id: payment.id,
+                  title: payment.billerName || "Bill",
+                  detail: [payment.customerBillAccountNumber, payment.customerName].filter(Boolean).join(" · "),
+                  amount: payment.amount,
+                },
+              ]
+            : []
+        }
+        busy={busy}
+        onClose={() => {
+          if (!busy) setDirectPayOpen(false);
+        }}
+        onConfirm={payWithBbps}
       />
     </div>
   );

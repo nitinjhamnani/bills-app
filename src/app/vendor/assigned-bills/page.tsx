@@ -119,12 +119,11 @@ export default function AssignedBillsPage() {
   const canBulkPay =
     selectedIds.size > 0 &&
     selectedInProgress.length === selectedIds.size;
-  const bulkPayReady = selectedInProgress.every((bill) => {
-    const hasRefs =
+  const bulkPayReady = selectedInProgress.every(
+    (bill) =>
       Boolean((references[bill.id] ?? "").trim()) &&
-      Boolean((bbpsReferences[bill.id] ?? "").trim());
-    return isMultiPay ? hasRefs : hasRefs && Boolean(proofs[bill.id]);
-  });
+      Boolean((bbpsReferences[bill.id] ?? "").trim()),
+  );
   const columns = showSelect
     ? ["", "Biller", "Consumer", "Due date", "Amount", "Status", ""]
     : ["Biller", "Consumer", "Due date", "Amount", "Status", ""];
@@ -409,7 +408,7 @@ export default function AssignedBillsPage() {
       }
       const preview = (await response.json()) as SheetPreview;
       if (preview.inProgress + preview.paid === 0) {
-        toast.error(preview.errors[0]?.message ?? "No rows will change. Set New status to In progress.");
+        toast.error(preview.errors[0]?.message ?? "No rows will change. Set New status to In progress or Paid.");
         setSheetFile(null);
         return;
       }
@@ -842,7 +841,7 @@ export default function AssignedBillsPage() {
         description={
           isMultiPay
             ? `Enter the transaction reference and BBPS reference for each of the ${selectedInProgress.length} selected bills (${inr(selectedInProgress.reduce((sum, b) => sum + b.amount, 0))}).`
-            : "Enter the transaction reference, BBPS reference, and attach proof of payment."
+            : "Enter the transaction reference and BBPS reference. Proof of payment is optional."
         }
         footer={
           <>
@@ -972,12 +971,9 @@ export default function AssignedBillsPage() {
                 }
               />
               <label className="flex min-w-0 flex-col gap-1.5">
-                <span className="text-xs font-semibold text-slate-700">
-                  Proof of payment <span className="text-rose-500">*</span>
-                </span>
+                <span className="text-xs font-semibold text-slate-700">Proof of payment</span>
                 <input
                   type="file"
-                  required
                   accept="application/pdf,image/png,image/jpeg,image/webp"
                   onChange={(event) => {
                     const file = event.target.files?.[0];

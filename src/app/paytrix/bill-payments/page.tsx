@@ -29,6 +29,7 @@ import { Table, THead, TBody, TR, TD, TablePagination } from "@/components/ui/Ta
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/components/ui/Toast";
+import { DirectPayModal } from "@/components/DirectPayModal";
 import { cn } from "@/lib/cn";
 import type { BulkRowResult, Client, OrgStatus, VendorStage } from "@/lib/types";
 import { API_BASE_URL } from "@/lib/workspace";
@@ -145,6 +146,8 @@ export default function OrganisationBillPaymentsPage() {
   const [settleTargets, setSettleTargets] = useState<BillPaymentRow[] | null>(null);
   const [settleMode, setSettleMode] = useState<"paid" | "failed">("paid");
   const [busyAction, setBusyAction] = useState(false);
+  const [directPaying, setDirectPaying] = useState(false);
+  const [directPayTargets, setDirectPayTargets] = useState<BillPaymentRow[] | null>(null);
   const [bbpsTxns, setBbpsTxns] = useState<Record<string, string>>({});
   const [externalTxns, setExternalTxns] = useState<Record<string, string>>({});
   const [billType, setBillType] = useState("");
@@ -377,6 +380,11 @@ export default function OrganisationBillPaymentsPage() {
     currentRole === "SUPER_ADMIN" ||
     currentRole === "ORGANISATION_ADMIN" ||
     currentRole === "CHECKER";
+  const canDirectPay =
+    currentRole === "SUPER_ADMIN" ||
+    currentRole === "ORGANISATION_ADMIN" ||
+    currentRole === "MAKER" ||
+    currentRole === "CHECKER";
 
   function resetFilters() {
     setSelectedCorpId("ALL");
@@ -488,6 +496,47 @@ export default function OrganisationBillPaymentsPage() {
       await load(true);
     } finally {
       setBusyAction(false);
+    }
+  }
+
+  function openDirectPay() {
+    const targets = selectedRows.length > 0 ? selectedRows : selectedInProgressRows;
+    if (targets.length === 0) return;
+    setDirectPayTargets(targets);
+  }
+
+  async function paySelectedWithBbps() {
+    const targets = directPayTargets ?? [];
+    if (targets.length === 0) return;
+    setDirectPaying(true);
+    let ok = 0;
+    let failed = 0;
+    let lastError: string | null = null;
+    try {
+      for (const target of targets) {
+        try {
+          await apiFetch(`/api/v1/paytrix/my-payments/${target.id}/pay-bbps`, { method: "POST" });
+          ok++;
+        } catch (err) {
+          failed++;
+          lastError = err instanceof ApiError ? err.message : "Direct Pay failed";
+        }
+      }
+      if (failed === 0) {
+        toast.success(ok === 1 ? "Bill paid through BBPS" : `Paid ${ok} bills through BBPS`);
+        setSelectedIds(new Set());
+        setDirectPayTargets(null);
+      } else {
+        setDirectPayTargets(null);
+        toast.error(
+          ok > 0
+            ? `Paid ${ok} of ${targets.length}. ${lastError ?? ""}`
+            : lastError ?? "Direct Pay failed",
+        );
+      }
+      await load(true);
+    } finally {
+      setDirectPaying(false);
     }
   }
 
@@ -944,6 +993,30 @@ export default function OrganisationBillPaymentsPage() {
                 Mark as Paid ({selectedInProgressRows.length})
               </Button>
             )}
+            {selectedInProgressRows.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                icon={<Zap size={14} />}
+                loading={directPaying}
+                disabled={
+                  !canDirectPay ||
+                  directPaying ||
+                  selectedRows.length > 0 ||
+                  !selectedInProgressRows.every((r) => r.canSettle)
+                }
+                title={
+                  selectedRows.length > 0
+                    ? "Select only in-progress bills to pay through BBPS"
+                    : !selectedInProgressRows.every((r) => r.canSettle)
+                      ? "Selected bill requires checker/admin approval"
+                      : undefined
+                }
+                onClick={openDirectPay}
+              >
+                Direct Pay ({selectedInProgressRows.length})
+              </Button>
+            )}
             {selectedRows.length > 0 && (
               <Button
                 size="sm"
@@ -962,10 +1035,11 @@ export default function OrganisationBillPaymentsPage() {
                 size="sm"
                 variant="outline"
                 icon={<Zap size={14} />}
-                disabled
-                title="Direct payment via BBPS API coming soon"
+                loading={directPaying}
+                disabled={!canDirectPay || directPaying}
+                onClick={openDirectPay}
               >
-                Direct Pay
+                Direct Pay ({selectedRows.length})
               </Button>
             )}
           </div>
@@ -1900,6 +1974,21 @@ export default function OrganisationBillPaymentsPage() {
           </div>
         </div>
       </Modal>
+
+      <DirectPayModal
+        open={directPayTargets != null}
+        bills={(directPayTargets ?? []).map((row) => ({
+          id: row.id,
+          title: row.operatorName || "Bill",
+          detail: [row.consumerId ?? row.billId, row.corpName].filter(Boolean).join(" · "),
+          amount: row.billAmount,
+        }))}
+        busy={directPaying}
+        onClose={() => {
+          if (!directPaying) setDirectPayTargets(null);
+        }}
+        onConfirm={paySelectedWithBbps}
+      />
     </div>
   );
 }

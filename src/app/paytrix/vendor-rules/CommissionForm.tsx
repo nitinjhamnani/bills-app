@@ -27,12 +27,12 @@ export function CommissionForm({
   const [ranges, setRanges] = useState<CommissionRange[]>([]);
   const [operators, setOperators] = useState<Named[]>([]);
   const [vendors, setVendors] = useState<Client[]>([]);
-  const categoryId = editing?.categoryCode ?? DEFAULT_CATEGORY_ID;
-  const [operatorId, setOperatorId] = useState(editing?.operatorId ?? "");
+  const [operatorIds, setOperatorIds] = useState<string[]>([]);
   const [vendorId, setVendorId] = useState(editing?.vendorId ?? defaultVendorId ?? "");
   const [rangeId, setRangeId] = useState("");
   const [commission, setCommission] = useState(editing ? String(editing.commission) : "");
   const [saving, setSaving] = useState(false);
+  const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
 
   useEffect(() => {
     apiFetch<CommissionRange[]>("/api/v1/paytrix/commissions/ranges")
@@ -78,14 +78,20 @@ export function CommissionForm({
       };
       if (editing) {
         await apiFetch(`/api/v1/paytrix/commissions/${editing.id}`, { method: "PUT", body });
-      } else {
-        await apiFetch("/api/v1/paytrix/commissions", {
-          method: "POST",
-          body: { ...body, categoryId: DEFAULT_CATEGORY_ID, operatorId, vendorId },
-        });
+        toast.success("Commission updated");
+        onClose(true);
+        return;
       }
-      toast.success(editing ? "Commission updated" : "Commission saved");
-      onClose(true);
+      const result = await apiFetch<CreateOutcome>("/api/v1/paytrix/commissions", {
+        method: "POST",
+        body: { ...body, categoryId: DEFAULT_CATEGORY_ID, operatorIds, vendorId },
+      });
+      if (result.skipped.length === 0) {
+        toast.success(result.created.length === 1 ? "Vendor rule saved" : `${result.created.length} vendor rules saved`);
+        onClose(true);
+        return;
+      }
+      setOutcome(result);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not save this commission");
     } finally {
@@ -93,20 +99,22 @@ export function CommissionForm({
     }
   }
 
-  const ready = (editing || (operatorId && vendorId)) && rangeId !== "" && commission.trim() !== "";
+  const ready = (editing || (operatorIds.length > 0 && vendorId)) && rangeId !== "" && commission.trim() !== "";
 
   return (
     <Modal
       open
-      onClose={saving ? () => undefined : () => onClose(false)}
+      onClose={saving ? () => undefined : () => onClose(Boolean(outcome && outcome.created.length > 0))}
       size="md"
       title={editing ? "Edit commission" : "Add vendor rule"}
       description={editing
         ? "The range and percent can change. Category, operator, and vendor stay as they are."
-        : "A new commission is approved straight away. Its amount band comes from the range you pick."}
+        : "Each selected operator becomes its own approved rule at this percent and range."}
       footer={
         <>
-          <Button variant="outline" onClick={() => onClose(false)} disabled={saving}>Cancel</Button>
+          <Button variant="outline" onClick={() => onClose(Boolean(outcome && outcome.created.length > 0))} disabled={saving}>
+            {outcome && outcome.created.length > 0 ? "Close" : "Cancel"}
+          </Button>
           <Button form="commission-form" type="submit" loading={saving} disabled={!ready}>{editing ? "Save changes" : "Save"}</Button>
         </>
       }
@@ -124,16 +132,23 @@ export function CommissionForm({
         ) : (
           <>
             <SearchableSelect
-              label="Operator"
-              value={operatorId}
-              onChange={setOperatorId}
-              placeholder="Select an operator..."
+              label="Operators"
+              multiple
+              value=""
+              onChange={() => undefined}
+              values={operatorIds}
+              onValuesChange={(next) => {
+                setOperatorIds(next);
+                setOutcome(null);
+              }}
+              placeholder="Select operators..."
               searchPlaceholder="Search operators..."
               options={operators.map((item) => ({
                 value: item.id,
                 label: item.name,
               }))}
             />
+            {outcome && <CreateOutcomeList outcome={outcome} />}
             {!defaultVendorId && (
               <SearchableSelect
                 label="Vendor"
@@ -168,6 +183,28 @@ export function CommissionForm({
         />
       </form>
     </Modal>
+  );
+}
+
+interface CreateOutcome {
+  created: Commission[];
+  skipped: { operatorId: string; operatorName: string; message: string }[];
+}
+
+function CreateOutcomeList({ outcome }: { outcome: CreateOutcome }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {outcome.created.length > 0 && (
+        <p className="text-xs font-medium text-slate-700">
+          Saved {outcome.created.map((rule) => rule.operatorName).join(", ")}.
+        </p>
+      )}
+      {outcome.skipped.map((item) => (
+        <p key={item.operatorId} className="text-xs font-medium text-rose-700">
+          {item.operatorName}: {item.message}
+        </p>
+      ))}
+    </div>
   );
 }
 

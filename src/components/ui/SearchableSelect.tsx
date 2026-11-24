@@ -15,6 +15,10 @@ export interface SearchableSelectProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  /** When set, the menu toggles several values and stays open. */
+  multiple?: boolean;
+  values?: string[];
+  onValuesChange?: (values: string[]) => void;
   options: SearchableOption[];
   placeholder?: string;
   searchPlaceholder?: string;
@@ -37,6 +41,9 @@ export function SearchableSelect({
   label,
   value,
   onChange,
+  multiple = false,
+  values = [],
+  onValuesChange,
   options,
   placeholder = "Select an option...",
   searchPlaceholder = "Type to search...",
@@ -95,7 +102,7 @@ export function SearchableSelect({
               (opt.sublabel ?? "").toLowerCase().includes(q),
           );
 
-    if (!value) return base;
+    if (multiple || !value) return base;
 
     const matchingSelected =
       base.find((opt) => opt.value === value) ??
@@ -107,7 +114,7 @@ export function SearchableSelect({
       matchingSelected,
       ...base.filter((opt) => opt.value !== value),
     ];
-  }, [options, query, searchable, disableClientFilter, value, activeSelection]);
+  }, [options, query, searchable, disableClientFilter, value, activeSelection, multiple]);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -189,10 +196,28 @@ export function SearchableSelect({
   }
 
   function handleSelect(option: SearchableOption) {
+    if (multiple) {
+      const next = values.includes(option.value)
+        ? values.filter((item) => item !== option.value)
+        : [...values, option.value];
+      onValuesChange?.(next);
+      return;
+    }
     setCachedSelected(option);
     onChange(option.value);
     setOpen(false);
   }
+
+  const selectedCount = multiple ? values.length : activeSelection ? 1 : 0;
+  const selectedSummary = useMemo(() => {
+    if (!multiple) return null;
+    const labels = values
+      .map((item) => options.find((opt) => opt.value === item)?.label ?? item)
+      .filter(Boolean);
+    if (labels.length === 0) return null;
+    if (labels.length <= 2) return labels.join(", ");
+    return `${labels.length} selected`;
+  }, [multiple, options, values]);
 
   function handleKeyDown(event: React.KeyboardEvent) {
     if (!open) {
@@ -281,7 +306,7 @@ export function SearchableSelect({
                 </li>
               ) : (
                 filteredOptions.map((opt, idx) => {
-                  const isSelected = opt.value === value;
+                  const isSelected = multiple ? values.includes(opt.value) : opt.value === value;
                   const isHighlighted = idx === highlightedIndex;
                   return (
                     <li key={opt.value} role="option" aria-selected={isSelected}>
@@ -339,7 +364,13 @@ export function SearchableSelect({
         )}
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          {activeSelection ? (
+          {multiple ? (
+            selectedSummary ? (
+              <span className="truncate font-medium text-slate-900">{selectedSummary}</span>
+            ) : (
+              <span className="truncate text-slate-400">{placeholder}</span>
+            )
+          ) : activeSelection ? (
             <>
               <span className="truncate font-medium text-slate-900">
                 {activeSelection.label}
@@ -356,7 +387,7 @@ export function SearchableSelect({
         </span>
 
         <span className="flex shrink-0 items-center gap-1 text-slate-400">
-          {allowClear && activeSelection && !disabled && (
+          {allowClear && selectedCount > 0 && !disabled && (
             <span
               role="button"
               tabIndex={-1}
@@ -364,7 +395,8 @@ export function SearchableSelect({
               onClick={(event) => {
                 event.stopPropagation();
                 setCachedSelected(null);
-                onChange("");
+                if (multiple) onValuesChange?.([]);
+                else onChange("");
               }}
               className="rounded-md p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
             >
