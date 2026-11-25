@@ -1,174 +1,169 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Building2, MapPin, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Building2,
+  MapPin,
+  ShieldCheck,
+  Store,
+  Users,
+} from "lucide-react";
+import { ThinkWalnutHeroBanner } from "@/components/marketing/ThinkWalnutSections";
 import { SITE } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: "About",
+  title: "About Us — Modernising Corporate Expense Management",
   description:
-    "Paytrix is a B2B utility bill payments platform for organisations and companies in India. Learn who it is built for and how bill work is controlled.",
-  keywords: ["about Paytrix", "B2B bill payments India", "utility payments for companies"],
-  openGraph: {
-    title: "About Paytrix | B2B Utility Bill Payments",
-    description:
-      "Paytrix is a B2B utility bill payments platform for organisations and companies in India. Learn who it is built for and how bill work is controlled.",
-    locale: "en_IN",
-    type: "website",
-    siteName: "Paytrix",
-  },
+    "Paytrix is a modern corporate expense and spend management platform in India empowering multi-location enterprises with real-time budget, wallet, and payout control.",
 };
 
-const AUDIENCE = [
+const GOVERNANCE_PILLARS = [
+  {
+    icon: ShieldCheck,
+    name: "Policy & Disbursement Architecture",
+    role: "Verified Payables & Zero-Duplicate Controls",
+    bio: "Every vendor and recurring facility account on Paytrix is indexed uniquely across the organisation. Liabilities are verified upfront before disbursement, preventing duplicate debits and ensuring clean UTR traceability.",
+  },
   {
     icon: Building2,
-    title: "Organisations",
-    body: "Bill-payment businesses and operating companies that onboard clients, collect funds into wallets, and settle electricity, water, gas, broadband, and other Indian utilities.",
+    name: "Corporate Treasury & Cost-Centre Control",
+    role: "Ring-Fenced Wallets & Location-Scoped Access",
+    bio: "Built for multi-location enterprises — headquarters, manufacturing plants, retail chains, warehouses, and institutions — giving CFOs one ring-fenced treasury wallet while local managers run site expenses.",
   },
   {
-    icon: Users,
-    title: "Client companies",
-    body: "Businesses that need a controlled way to register consumer accounts, see what is due this cycle, and pay from a prepaid balance instead of ad-hoc transfers.",
-  },
-];
-
-const PRINCIPLES = [
-  {
-    title: "A managed bill is the account",
-    body: "The consumer number is registered once and reused. Fetching does not create a new account, and paying does not depend on someone retyping the biller details.",
-  },
-  {
-    title: "A fetch is not a payment",
-    body: "Fetching tells you what is due. If the utility shows the account is already paid, Paytrix records that and stops. A payment cycle opens only when there is an amount to pay.",
-  },
-  {
-    title: "Client payment and biller settlement are different steps",
-    body: "The client pays from the wallet. The organisation settles with the utility afterwards. Those are separate actions, each with an owner and a timestamp.",
-  },
-  {
-    title: "Access is issued, not self-serve",
-    body: "There is no public signup. Paytrix issues logins to its own staff and to client companies.",
+    icon: Store,
+    name: "Multi-Rail & Partner Ecosystem",
+    role: "Intelligent Routing & Maker–Checker Governance",
+    bio: "Combines direct instant payment execution with rule-based settlement partner routing, configurable commercial slabs, corporate privacy protection, and end-to-end settlement verification.",
   },
 ];
 
 export default function AboutPage() {
   return (
     <div className="bg-white">
-      <section className="border-b border-slate-100 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">About Paytrix</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            The workspace Indian organisations use to pay utility bills for companies.
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-            Paytrix is a B2B bill payments platform. It is not a consumer UPI app. It is where an organisation fetches utility bills, takes payment from a client wallet, and settles with the biller under maker–checker control.
+      {/* 1. Modern Split Hero Banner */}
+      <ThinkWalnutHeroBanner
+        badge="About Paytrix"
+        eyebrow="Our Mission"
+        title={
+          <>
+            Reinventing Corporate
+            <span className="mt-1 block text-indigo-200">Expense &amp; Spend Control.</span>
+          </>
+        }
+        subtitle="We help finance leaders replace fragmented spreadsheets, manual approvals, and scattered payouts with a single real-time spend operating system."
+        imageSrc="/images/thinkwalnut/tw-about-hero.webp"
+        imageAlt="Paytrix product and engineering team building corporate expense software"
+      />
+
+      {/* 2. Mission & Solving a Big Problem Narrative */}
+      <section className="mx-auto max-w-5xl px-4 py-16 sm:px-6 sm:py-22">
+        <p className="text-sm leading-relaxed text-slate-700 sm:text-base">
+          {SITE.name} is an enterprise spend management platform that digitises, automates, and governs corporate expenses for multi-location companies across India — uniting departmental budgets, vendor payouts, corporate card dues, fleet transit, insurance, statutory taxes, and facility utilities under one roof.
+        </p>
+
+        <h2 className="mt-9 text-2xl font-bold tracking-tight text-indigo-950 sm:text-3xl">
+          Our mission is to give finance teams effortless control over every corporate rupee.
+        </h2>
+        <p className="mt-3 text-sm leading-relaxed text-slate-700 sm:text-base">
+          We eliminate chaotic reimbursement threads, manual spreadsheet trackers, and untracked branch transfers by giving CFOs, controllers, and site operators a single double-entry ledger for every business obligation.
+        </p>
+
+        <h2 className="mt-9 text-2xl font-bold tracking-tight text-indigo-950 sm:text-3xl">
+          Solving a critical enterprise finance bottleneck
+        </h2>
+        <div className="mt-3 space-y-4 text-sm leading-relaxed text-slate-700 sm:text-base">
+          <p>
+            Growing multi-branch businesses in India still spend hundreds of finance hours every month chasing branch invoices, logging into dozens of disconnected portals, and reconciling bank statements line by line at month-end.
+          </p>
+          <p>
+            Delayed email sign-offs, missing vouchers, duplicate payouts on obligations already cleared locally, and unverified vendor transfers create avoidable penalties and audit friction.
+          </p>
+          <p>
+            {SITE.name} SpendOS brings ring-fenced corporate treasury wallets, configurable maker–checker workflows, automated payable verification, and one-click Excel &amp; PDF ERP exports into one cohesive platform built for scale.
           </p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
+      {/* 3. Architecture & Governance Cards */}
+      <section className="border-y border-indigo-100/80 bg-slate-50/80 py-16 sm:py-22">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <p className="text-xs font-bold tracking-[0.16em] text-indigo-700 uppercase">
+            Platform Foundation
+          </p>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight text-indigo-950 sm:text-4xl">
+            Engineered for financial accountability at every step
+          </h2>
+
+          <div className="mt-10 grid gap-6 lg:grid-cols-3">
+            {GOVERNANCE_PILLARS.map((card) => {
+              const Icon = card.icon;
+              return (
+                <article
+                  key={card.name}
+                  className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-[var(--shadow-elevated)]"
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">
+                    <Icon size={24} />
+                  </span>
+                  <h3 className="mt-5 text-lg font-bold text-indigo-950">{card.name}</h3>
+                  <p className="mt-1 text-xs font-semibold text-indigo-700">{card.role}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{card.bio}</p>
+                </article>
+              );
+            })}
+          </div>
+
+          <p className="mt-12 text-lg font-semibold leading-relaxed text-indigo-950 sm:text-2xl">
+            {SITE.name} empowers modern enterprises across India to scale multi-location operations with complete spend confidence.
+          </p>
+        </div>
+      </section>
+
+      {/* 4. Office & Invitation-Only Onboarding */}
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
+        <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
           <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Why utility bills break operations teams</h2>
+            <div className="inline-flex items-center gap-2 text-xs font-bold tracking-[0.16em] text-indigo-700 uppercase">
+              <Users size={15} /> Enterprise Onboarding
+            </div>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-indigo-950 sm:text-3xl">
+              Headquartered in {SITE.locality}, built for enterprises across {SITE.country}
+            </h2>
             <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
-              A company with sites across India does not have one electricity bill. It has a consumer number for each connection, a due date that moves, and a portal that looks different for every discom, water board, and gas company. Broadband, mobile, and DTH add another set of logins.
+              {SITE.name} provisions dedicated role-isolated workspaces for corporate groups, their regional branches, and empanelled settlement partners. Connect with our team at {SITE.addressLines.join(", ")} to tailor SpendOS for your organisation.
             </p>
-            <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
-              When a bill-payment business does this for many client companies, the failure modes are familiar: a bill fetched twice, a wallet debited for an amount that was already paid outside the platform, or a settlement with the utility that finance cannot match to the client payment.
-            </p>
-            <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
-              Paytrix keeps those steps separate so the people running the book, and the people explaining it later, are looking at the same record.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 sm:p-8">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">What “done” looks like</h2>
-            <ul className="mt-4 flex flex-col gap-4 text-sm leading-relaxed text-slate-700">
-              <li>
-                <strong className="text-slate-900">Every connection has an owner.</strong> A managed bill names the utility, the consumer number, and the client company it belongs to.
-              </li>
-              <li>
-                <strong className="text-slate-900">Due amounts are fetched, not guessed.</strong> Operators work from the latest bill, including a clear already-paid outcome.
-              </li>
-              <li>
-                <strong className="text-slate-900">Funds sit in a wallet first.</strong> Client companies pay from a prepaid balance. Settlement with the utility is Paytrix’s next action.
-              </li>
-              <li>
-                <strong className="text-slate-900">The trail survives the month.</strong> Reports cover bills, payments, wallets, funding, and settlement for the dates finance asks for.
-              </li>
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section className="border-t border-slate-100 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">How the product is designed</h2>
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            {PRINCIPLES.map((item) => (
-              <article key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[var(--shadow-card)]">
-                <h3 className="text-base font-bold text-slate-900">{item.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.body}</p>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Who it is for</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
-          Paytrix serves organisations and the companies on their book. Each role sees only its own work.
-        </p>
-        <div className="mt-8 grid gap-5 md:grid-cols-3">
-          {AUDIENCE.map((item) => {
-            const Icon = item.icon;
-            return (
-              <article key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[var(--shadow-card)]">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-                  <Icon size={18} aria-hidden />
-                </span>
-                <h3 className="mt-4 text-base font-bold text-slate-900">{item.title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.body}</p>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="border-t border-slate-100 bg-slate-50">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-16 sm:px-6 lg:grid-cols-[1.2fr_0.8fr] lg:items-center">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Based in Aligarh, built for companies across India</h2>
-            <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
-              Paytrix works with organisations that pay utility bills for companies they operate or serve. The team is at {SITE.addressLines[0]}, {SITE.addressLines[1]}, {SITE.addressLines[2]}.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap gap-3">
               <Link
                 href="/contact"
-                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-600 px-5 text-sm font-semibold text-white hover:from-indigo-800 hover:to-indigo-700"
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-600 px-6 text-sm font-semibold text-white hover:from-indigo-800 hover:to-indigo-700"
               >
-                Contact the team
-                <ArrowRight size={16} />
+                Talk to our team <ArrowRight size={16} />
               </Link>
               <Link
-                href="/services"
-                className="inline-flex min-h-11 items-center rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-800 hover:border-indigo-300 hover:bg-slate-50"
+                href="/payments"
+                className="inline-flex min-h-11 items-center rounded-xl border border-indigo-200 bg-white px-5 text-sm font-semibold text-indigo-900 hover:bg-indigo-50"
               >
-                See services
+                Explore SpendOS Suite
               </Link>
             </div>
           </div>
-          <address className="rounded-2xl border border-slate-200 bg-white p-6 not-italic shadow-[var(--shadow-card)]">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-              <MapPin size={18} aria-hidden />
+
+          <address className="tw-card-indigo rounded-2xl border border-indigo-100 p-7 not-italic">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-2xs">
+              <MapPin size={20} aria-hidden />
             </span>
-            <p className="mt-4 text-sm font-bold text-slate-900">{SITE.name}</p>
+            <p className="mt-4 text-base font-bold text-indigo-950">{SITE.name}</p>
             {SITE.addressLines.map((line) => (
-              <p key={line} className="text-sm leading-relaxed text-slate-600">
+              <p key={line} className="text-sm leading-relaxed text-slate-700">
                 {line}
               </p>
             ))}
-            <p className="text-sm text-slate-600">{SITE.country}</p>
-            <a href={`tel:${SITE.phoneTel}`} className="mt-4 block text-sm font-semibold text-indigo-700 hover:text-indigo-800">
+            <p className="text-sm text-slate-700">{SITE.country}</p>
+            <a
+              href={`tel:${SITE.phoneTel}`}
+              className="mt-4 block text-sm font-bold text-indigo-700 hover:text-indigo-950"
+            >
               {SITE.phoneDisplay}
             </a>
           </address>

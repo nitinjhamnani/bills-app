@@ -16,7 +16,7 @@ export const SITE = {
 } as const;
 
 export const SITE_DESCRIPTION =
-  "Paytrix is a B2B bill payments platform for organisations and companies in India. Fetch, pay, and settle electricity, water, gas, broadband, mobile, DTH, and other utility bills from one workspace.";
+  "Paytrix is a modern corporate expense and multi-location spend management platform for enterprises in India. Control departmental budgets, maker–checker approvals, corporate treasury wallets, vendor disbursements, and recurring facility expenses from one unified operating system.";
 
 export function mapsUrl() {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(SITE.mapsQuery)}`;

@@ -92,10 +92,10 @@ const SECTIONS = [
 export default function PrivacyPage() {
   return (
     <div className="bg-white">
-      <section className="border-b border-slate-100 bg-slate-50">
+      <section className="tw-band-indigo border-b border-indigo-100">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Legal</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
+          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight text-indigo-950 sm:text-5xl">
             Privacy policy
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">

@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Paytrix",
     short_name: "Paytrix",
     description:
-      "B2B utility bill payments for organisations and companies in India",
+      "Corporate expense and multi-location spend management platform for enterprises in India",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

@@ -147,7 +147,7 @@ export default function OrganisationDashboard() {
               onClick={() => router.push(item.href)}
               className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
             >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
                 <Icon size={16} />
               </span>
               <span className="min-w-0 flex-1">

@@ -21,6 +21,15 @@ function profileHref(pathname: string) {
   return "/paytrix/profile";
 }
 
+function formatRoleLabel(role: string) {
+  return role
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export function UserMenu({
   user,
   pathname,
@@ -91,61 +100,71 @@ export function UserMenu({
         aria-expanded={open}
         aria-label="Account menu"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex h-11 items-center gap-1.5 rounded-full py-1 pr-1 pl-1 text-left hover:bg-slate-50 sm:pr-2"
+        className="flex h-11 cursor-pointer items-center gap-2.5 rounded-full py-1 pr-1 pl-1 text-left transition-colors hover:bg-slate-50 sm:pr-2.5"
       >
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1E1B4B] text-xs font-bold text-emerald-300 ring-2 ring-indigo-100">
           {userInitials(name)}
+        </span>
+        <span className="hidden min-w-0 leading-tight sm:block">
+          <span className="block max-w-[10rem] truncate text-xs font-bold text-slate-900">
+            {name}
+          </span>
+          <span className="block text-[11px] font-medium text-slate-400">
+            {formatRoleLabel(user.role)}
+          </span>
         </span>
         <ChevronDown
           size={14}
-          className={cn("hidden text-slate-400 sm:block", open && "rotate-180")}
+          className={cn("hidden text-slate-400 transition-transform sm:block", open && "rotate-180")}
         />
       </button>
 
       {open &&
         menuPos &&
         createPortal(
-        <div
-          ref={menuRef}
-          role="menu"
-          style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 90 }}
-          className="w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
-        >
-          <div className="flex items-center gap-3 px-2 py-2">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-              {userInitials(name)}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
-              <p className="truncate font-mono text-[11px] text-slate-500">{user.userCode || user.phoneNumber}</p>
-              <div className="mt-1.5">
-                <StatusBadge status={user.role} />
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 90 }}
+            className="w-64 rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg"
+          >
+            <div className="flex items-center gap-3 px-2 py-2">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#1E1B4B] text-xs font-bold text-emerald-300">
+                {userInitials(name)}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">{name}</p>
+                <p className="truncate font-mono text-[11px] text-slate-500">
+                  {user.userCode || user.phoneNumber}
+                </p>
+                <div className="mt-1.5">
+                  <StatusBadge status={user.role} />
+                </div>
               </div>
             </div>
-          </div>
-          <div className="my-1 h-px bg-slate-100" />
-          <Link
-            role="menuitem"
-            href={href}
-            className={cn(
-              "flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50",
-              pathname === href && "bg-blue-50 text-blue-700",
-            )}
-          >
-            <UserRound size={16} className="text-slate-400" />
-            My profile
-          </Link>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={handleLogout}
-            className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
-          >
-            <LogOut size={16} />
-            Log out
-          </button>
-        </div>,
-        document.body,
+            <div className="my-1 h-px bg-slate-100" />
+            <Link
+              role="menuitem"
+              href={href}
+              className={cn(
+                "flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50",
+                pathname === href && "bg-indigo-50 text-indigo-700",
+              )}
+            >
+              <UserRound size={16} className="text-slate-400" />
+              My profile
+            </Link>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleLogout}
+              className="flex min-h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+            >
+              <LogOut size={16} />
+              Log out
+            </button>
+          </div>,
+          document.body,
         )}
     </div>
   );

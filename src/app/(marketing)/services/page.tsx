@@ -3,176 +3,212 @@ import Link from "next/link";
 import {
   ArrowRight,
   BarChart3,
+  Briefcase,
+  Car,
+  CreditCard,
   Droplets,
   FileSearch,
   Flame,
+  HeartHandshake,
   Landmark,
   MessageCircle,
   Phone,
+  Receipt,
   ShieldCheck,
   Smartphone,
-  Tv,
   Wallet,
   Wifi,
   Zap,
 } from "lucide-react";
+import {
+  DemoEnquiryForm,
+  ThinkWalnutHeroBanner,
+} from "@/components/marketing/ThinkWalnutSections";
 
 export const metadata: Metadata = {
-  title: "Services",
+  title: "Services — Corporate Expense Categories & SpendOS Capabilities",
   description:
-    "Pay electricity, water, gas, broadband, mobile, DTH, and other utility bills for companies in India. Paytrix covers bill fetch, wallets, settlement, reports, and maker–checker.",
-  keywords: [
-    "electricity bill payment for companies",
-    "water bill payment B2B",
-    "broadband bill payment India",
-    "utility bill settlement",
-    "Paytrix services",
-  ],
-  openGraph: {
-    title: "Utility Bill Payment Services | Paytrix",
-    description:
-      "Pay electricity, water, gas, broadband, mobile, DTH, and other utility bills for companies in India. Paytrix covers bill fetch, wallets, settlement, reports, and maker–checker.",
-    locale: "en_IN",
-    type: "website",
-    siteName: "Paytrix",
-  },
+    "Manage corporate operating expenses, departmental budgets, treasury wallets, vendor payouts, and recurring facility obligations from one unified Paytrix workspace.",
 };
 
-const UTILITIES = [
+const EXPENSE_CATEGORIES = [
+  {
+    icon: Briefcase,
+    title: "Vendor & Operational Payables",
+    body: "Centralize recurring supplier payouts, contracted services, and location-level operating commitments with full maker–checker control.",
+  },
+  {
+    icon: CreditCard,
+    title: "Corporate Card Settlements",
+    body: "Track corporate card billing cycles across leadership and regional teams and clear dues on schedule from treasury.",
+  },
   {
     icon: Zap,
-    title: "Electricity",
-    body: "Consumer numbers across discoms, fetched each cycle so due amounts are current before anyone pays.",
-  },
-  {
-    icon: Droplets,
-    title: "Water",
-    body: "Municipal and board connections for offices, plants, and properties Paytrix looks after.",
-  },
-  {
-    icon: Flame,
-    title: "Gas and LPG",
-    body: "Piped gas and commercial LPG accounts, kept as managed bills rather than one-off portal visits.",
+    title: "Commercial Power & Energy",
+    body: "Consolidate electricity accounts across offices, manufacturing plants, and warehouses with verified due tracking before funds move.",
   },
   {
     icon: Wifi,
-    title: "Broadband",
-    body: "Site-level internet accounts, with a fetch that shows what is due before the wallet is debited.",
+    title: "Enterprise Broadband & Leased Lines",
+    body: "Keep branch internet, dedicated leased lines, and office connectivity accounts governed on one corporate ledger.",
   },
   {
     icon: Smartphone,
-    title: "Mobile postpaid",
-    body: "Postpaid connections billed to a company, registered once and paid from the client wallet.",
+    title: "Corporate Mobile Plans",
+    body: "Manage company-issued postpaid mobile connections for field, sales, and executive teams without individual reimbursement claims.",
   },
   {
-    icon: Tv,
-    title: "DTH",
-    body: "Direct-to-home accounts that sit on the same book as the rest of a site’s utilities.",
+    icon: Car,
+    title: "Fleet, Logistics & FASTag",
+    body: "Fund and monitor commercial vehicle and logistics fleet transit accounts with real-time spend visibility.",
+  },
+  {
+    icon: HeartHandshake,
+    title: "Commercial & Asset Insurance",
+    body: "Never miss a corporate policy renewal — track institutional premiums with proactive schedule visibility and audit receipts.",
+  },
+  {
+    icon: Receipt,
+    title: "Equipment & Institutional EMIs",
+    body: "Manage scheduled corporate loan and equipment financing obligations directly from ring-fenced treasury wallets.",
+  },
+  {
+    icon: Landmark,
+    title: "Municipal & Property Taxes",
+    body: "Settle civic, commercial property, and local statutory obligations across all operating locations on time.",
+  },
+  {
+    icon: Droplets,
+    title: "Industrial & Facility Water",
+    body: "Track municipal and industrial water board charges across plants, campuses, and commercial facilities.",
+  },
+  {
+    icon: Flame,
+    title: "Commercial Gas & Fuel",
+    body: "Maintain commercial LPG and facility fuel accounts as structured recurring expenses rather than ad-hoc cash outlays.",
   },
   {
     icon: Phone,
-    title: "Landline",
-    body: "Fixed-line accounts that still arrive every month and still need a consumer number on file.",
-  },
-  {
-    icon: Landmark,
-    title: "Municipal dues",
-    body: "Civic charges your operations team already treats as part of the monthly utility run.",
+    title: "Office Landline & Voice",
+    body: "Keep fixed-line branch communication and reception desk accounts consolidated alongside enterprise telecom spend.",
   },
 ];
 
-const SERVICES = [
+const WORKSPACE_MODULES = [
   {
     icon: FileSearch,
-    title: "Bill fetch and managed accounts",
-    body: "Register each consumer number once. Paytrix fetches the latest bill, refreshes due amounts, and records when the utility says the account is already paid — without creating a false payment.",
+    title: "Centralised Expense & Payable Registry",
+    body: "Register every recurring vendor, facility, and branch account once across the organisation. Paytrix verifies live amounts due and automatically prevents duplicate payouts on already-settled cycles.",
     points: [
-      "Electricity, water, gas, broadband, mobile, DTH, and other configured utilities",
-      "Scheduled fetch, or a retry when a fetch fails",
-      "One managed bill per consumer account",
+      "Global uniqueness check prevents duplicate account entries",
+      "Automated due-amount verification before disbursement",
+      "Single or bulk Excel onboarding for multi-site rollouts",
     ],
+    tone: "tw-card-indigo",
   },
   {
     icon: Wallet,
-    title: "Client wallets",
-    body: "Client companies request a top-up. The organisation credits the wallet. Bill payments then debit that balance, with a statement of opening, credits, debits, and closing.",
+    title: "Ring-Fenced Corporate Treasury Wallets",
+    body: "Corporate treasury funds a dedicated wallet via RTGS, NEFT, or UPI with transfer proof. Every approved expense writes an immutable, category-tagged debit entry on the ledger.",
     points: [
-      "Prepaid balance before any utility is paid",
-      "A ledger line for every movement",
-      "Paytrix review before funds are credited",
+      "Pre-funded balance eliminates bank overdraft risk",
+      "Granular cost-centre & expense-category tagging",
+      "Maker–checker review before treasury credits post",
     ],
+    tone: "tw-card-slate",
   },
   {
     icon: Landmark,
-    title: "Payments and biller settlement",
-    body: "When a fetch finds an amount due, a payment cycle opens. The client pays from the wallet. Organisation users pick up the cycle and mark it settled with the utility.",
+    title: "Intelligent Direct & Partner Disbursements",
+    body: "Execute corporate disbursements directly over instant payment networks or route specialised high-value payouts through empanelled settlement partners under configurable slab rules.",
     points: [
-      "Client payment from the prepaid wallet",
-      "Paytrix pick-up and settlement with the biller",
-      "Maker–checker where your approval rules require it",
+      "Direct rail execution or rule-based partner routing",
+      "Configurable amount-slab fee & commission engine",
+      "End-to-end UTR proof and settlement confirmation",
     ],
+    tone: "tw-card-indigo",
   },
   {
     icon: BarChart3,
-    title: "Reports for operations and finance",
-    body: "Pull a date range instead of exporting raw screens. Bill statements, payment history, wallet activity, funding, and settlement registers are generated for the role that needs them.",
+    title: "CFO Analytics & ERP-Ready Statements",
+    body: "Generate structured date-range financial reports tailored for CFOs, controllers, and operations teams — ready to drop straight into your accounting close.",
     points: [
-      "Choose dates, then generate",
-      "Excel and PDF export",
-      "Separate catalogues for client, organisation, and platform",
+      "Spend-by-category, cost-centre & branch rollups",
+      "One-click Excel (.xlsx) and PDF statement exports",
+      "Complete wallet, payout & settlement registers",
     ],
+    tone: "tw-card-lavender",
   },
   {
     icon: ShieldCheck,
-    title: "Controls and audit",
-    body: "Access is split by role. Sensitive money actions can require a second person. An audit log records who moved money and when.",
+    title: "Maker–Checker Governance & Access Scoping",
+    body: "HQ admins, regional branch operators, and external partners work with strict tenant boundaries, stateful server-side sessions, and timestamped audit logs.",
     points: [
-      "Paytrix and client user management",
-      "Approval rules for settlement",
-      "Audit extract by date range",
+      "Dual-control approvals on sensitive treasury actions",
+      "Branch operators scoped strictly to assigned locations",
+      "Complete corporate privacy on partner-routed payouts",
     ],
+    tone: "tw-card-slate",
   },
   {
     icon: MessageCircle,
-    title: "Support and disputes",
-    body: "Client companies raise tickets inside the workspace. Disputes sit on the payment they belong to, so the operations team is not matching email threads to bill numbers.",
+    title: "In-Workspace Support & Exception Resolution",
+    body: "Finance and branch teams raise support threads directly inside Paytrix, keeping every inquiry or payout exception permanently linked to the exact transaction record.",
     points: [
-      "In-product support tickets",
-      "Disputes linked to the payment",
-      "The conversation stays on the record",
+      "Threaded in-workspace resolution history",
+      "Real-time unread status indicators for operations",
+      "Exception logs tied directly to the ledger entry",
     ],
+    tone: "tw-card-emerald",
   },
 ];
 
 export default function ServicesPage() {
   return (
     <div className="bg-white">
-      <section className="border-b border-slate-100 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Services</p>
-          <h1 className="mt-3 max-w-3xl text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
-            Utility bill payments for companies, run as an operation.
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-            Paytrix covers the utilities Indian organisations pay — electricity, water, gas, broadband, mobile, DTH, and more — and the controls around them. You enable the services Paytrix offers. Client companies see only their own accounts and payments.
-          </p>
-        </div>
-      </section>
+      <ThinkWalnutHeroBanner
+        badge="Capabilities & Services"
+        eyebrow="Corporate Expense Management · Treasury Wallets · Approvals"
+        title="Every recurring corporate & facility expense, governed in one place."
+        subtitle="Consolidate departmental budgets, vendor disbursements, corporate cards, and multi-site operational expenses on one audit-ready platform."
+        imageSrc="/images/thinkwalnut/tw-services-hero.webp"
+        imageAlt="Paytrix corporate expense management and analytics dashboard"
+      />
 
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Utilities on the platform</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">
-          These are the bill types operations teams run every month. An organisation switches on the categories it settles. A client company only sees the consumer accounts registered for it.
-        </p>
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {UTILITIES.map((item) => {
+      {/* Corporate Spend Categories */}
+      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-22">
+        <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+          <div className="max-w-2xl">
+            <p className="text-xs font-bold tracking-[0.16em] text-indigo-700 uppercase">
+              Expense Coverage
+            </p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-indigo-950 sm:text-4xl">
+              Comprehensive corporate &amp; operational spend categories
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600 sm:text-base">
+              Enable expense verticals globally or per subsidiary so each business unit and branch sees only the accounts and budgets assigned to it.
+            </p>
+          </div>
+          <Link
+            href="/payments"
+            className="inline-flex items-center gap-1.5 text-sm font-bold text-indigo-700 hover:text-indigo-950"
+          >
+            Explore FlowPay &amp; SpendOS <ArrowRight size={15} />
+          </Link>
+        </div>
+
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {EXPENSE_CATEGORIES.map((item) => {
             const Icon = item.icon;
             return (
-              <article key={item.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[var(--shadow-card)]">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
-                  <Icon size={18} aria-hidden />
+              <article
+                key={item.title}
+                className="rounded-2xl border border-indigo-100/90 bg-gradient-to-br from-indigo-50/60 via-white to-white p-6 shadow-[var(--shadow-card)] transition-transform hover:-translate-y-0.5"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">
+                  <Icon size={20} aria-hidden />
                 </span>
-                <h3 className="mt-4 text-sm font-bold text-slate-900">{item.title}</h3>
+                <h3 className="mt-4 text-base font-bold text-indigo-950">{item.title}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.body}</p>
               </article>
             );
@@ -180,24 +216,32 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      <section className="border-y border-slate-100 bg-slate-50">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">What the workspace includes</h2>
-          <div className="mt-8 grid gap-6 lg:grid-cols-2">
-            {SERVICES.map((service) => {
+      {/* Workspace Capabilities */}
+      <section className="border-t border-indigo-100/80 bg-slate-50/70 py-16 sm:py-22">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <h2 className="text-center text-3xl font-bold tracking-tight text-indigo-950 sm:text-4xl">
+            What the Paytrix SpendOS platform includes
+          </h2>
+          <div className="mt-10 grid gap-6 lg:grid-cols-2">
+            {WORKSPACE_MODULES.map((service) => {
               const Icon = service.icon;
               return (
-                <article key={service.title} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-[var(--shadow-card)] sm:p-8">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
-                    <Icon size={20} aria-hidden />
+                <article
+                  key={service.title}
+                  className={`${service.tone} flex flex-col rounded-2xl border border-indigo-100/80 p-7`}
+                >
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-2xs ring-1 ring-indigo-100">
+                    <Icon size={22} aria-hidden />
                   </span>
-                  <h3 className="mt-4 text-xl font-bold tracking-tight text-slate-900">{service.title}</h3>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-600">{service.body}</p>
-                  <ul className="mt-5 flex flex-col gap-2 text-sm text-slate-700">
+                  <h3 className="mt-5 text-xl font-bold tracking-tight text-indigo-950">
+                    {service.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-700">{service.body}</p>
+                  <ul className="mt-5 flex flex-col gap-2 text-sm text-indigo-950/85">
                     {service.points.map((point) => (
-                      <li key={point} className="flex gap-2">
+                      <li key={point} className="flex gap-2.5">
                         <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-600" />
-                        {point}
+                        <span>{point}</span>
                       </li>
                     ))}
                   </ul>
@@ -208,47 +252,9 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <h2 className="text-2xl font-bold tracking-tight text-slate-900">Who does what</h2>
-        <div className="mt-8 grid gap-5 md:grid-cols-2">
-          <article className="rounded-2xl border border-slate-200 p-6 sm:p-8">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Organisation</p>
-            <ul className="mt-4 flex flex-col gap-3 text-sm leading-relaxed text-slate-700">
-              <li>Onboard client companies and their users.</li>
-              <li>Enable the utility services Paytrix will settle.</li>
-              <li>Review wallet top-ups and credit the prepaid balance.</li>
-              <li>Pick up client-paid bills and settle with the utility.</li>
-              <li>Set approval rules and read the audit log.</li>
-            </ul>
-          </article>
-          <article className="rounded-2xl border border-slate-200 p-6 sm:p-8">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">Client company</p>
-            <ul className="mt-4 flex flex-col gap-3 text-sm leading-relaxed text-slate-700">
-              <li>Register consumer numbers for the utilities they pay.</li>
-              <li>Fetch bills and see whether an amount is due.</li>
-              <li>Fund the wallet and pay from that balance.</li>
-              <li>Download statements for the accounts they own.</li>
-              <li>Raise a support ticket or a dispute on a payment.</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section className="border-t border-slate-100 bg-slate-50">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-5 px-4 py-14 sm:px-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Tell us which utilities are on your book</h2>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-slate-600">
-              Share the companies, cities, and bill types you pay. Workspace access is issued after Paytrix is onboarded.
-            </p>
-          </div>
-          <Link
-            href="/contact"
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-700 to-indigo-600 px-5 text-sm font-semibold text-white hover:from-indigo-800 hover:to-indigo-700"
-          >
-            Contact Paytrix
-            <ArrowRight size={16} />
-          </Link>
+      <section className="border-t border-indigo-100 bg-white py-16 sm:py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <DemoEnquiryForm heading="Tell us how your organisation manages corporate expenses" compact />
         </div>
       </section>
     </div>

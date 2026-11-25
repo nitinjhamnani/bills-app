@@ -4,9 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
-  ChevronsLeft,
-  ChevronsRight,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -30,6 +30,12 @@ const SIDEBAR_COLLAPSED_KEY = "b2bfintech.sidebarCollapsed";
 function isNavActive(pathname: string, href: string, exact?: boolean) {
   if (exact || href.endsWith("/dashboard")) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function portalEyebrow(pathname: string) {
+  if (pathname.startsWith("/client")) return "CORPORATE";
+  if (pathname.startsWith("/vendor")) return "VENDOR";
+  return "ADMIN";
 }
 
 export function AppShell({
@@ -82,31 +88,30 @@ export function AppShell({
       {nav && nav.length > 0 && (
         <aside
           className={cn(
-            "fixed inset-y-0 left-0 z-40 flex h-dvh flex-col border-r border-slate-200/80 bg-white shadow-xs transition-all duration-200 ease-in-out",
+            "fixed inset-y-0 left-0 z-40 flex h-dvh flex-col border-r border-slate-200/80 bg-white transition-all duration-200 ease-in-out",
             mobileOpen ? "translate-x-0" : "-translate-x-full",
             "md:static md:h-full md:translate-x-0",
             collapsed ? "md:w-[76px]" : "w-64 md:w-64",
           )}
         >
           {/* Sidebar Brand Header */}
-          <div className="flex h-16 items-center justify-between px-5 border-b border-slate-100">
-            {!collapsed && (
+          <div className="flex h-16 items-center justify-between border-b border-slate-100 px-5">
+            {!collapsed ? (
               <div className="flex items-center gap-2.5 overflow-hidden">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-xs font-black tracking-wider text-white shadow-sm">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-800 to-indigo-600 text-xs font-black tracking-wider text-white shadow-sm">
                   Px
                 </span>
                 <div className="flex flex-col">
-                  <span className="truncate text-sm font-bold tracking-tight text-slate-900 leading-tight">
+                  <span className="truncate text-sm font-bold leading-tight tracking-tight text-indigo-950">
                     Paytrix
                   </span>
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Enterprise
+                  <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                    {portalEyebrow(pathname)}
                   </span>
                 </div>
               </div>
-            )}
-            {collapsed && (
-              <span className="mx-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 text-xs font-black tracking-wider text-white shadow-sm">
+            ) : (
+              <span className="mx-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-800 to-indigo-600 text-xs font-black tracking-wider text-white shadow-xs">
                 Px
               </span>
             )}
@@ -119,7 +124,7 @@ export function AppShell({
             </button>
           </div>
 
-          {/* Navigation Links */}
+          {/* Navigation Links with Deep Indigo Pill Active State */}
           <nav className="flex-1 overflow-y-auto px-3 py-4">
             <ul className="flex flex-col gap-1">
               {nav.map((link, index) => {
@@ -155,27 +160,32 @@ export function AppShell({
                           : undefined
                       }
                       className={cn(
-                        "relative flex min-h-10 items-center gap-3 rounded-xl px-3 py-2 text-xs font-semibold transition-all duration-150",
+                        "relative flex min-h-10.5 items-center gap-3 rounded-full px-4 py-2 text-[13px] font-semibold transition-all duration-150",
                         active
-                          ? "bg-blue-50/80 text-blue-600 font-bold shadow-2xs"
-                          : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-900",
-                        collapsed && "justify-center px-2",
+                          ? "bg-[#1E1B4B] text-white shadow-sm"
+                          : "text-slate-600 hover:bg-indigo-50/60 hover:text-indigo-950",
+                        collapsed && "justify-center rounded-xl px-2",
                       )}
                     >
-                      {active && !collapsed && (
-                        <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-blue-600" />
-                      )}
                       <span className="relative shrink-0">
-                        <Icon size={18} className={cn(active ? "text-blue-600" : "text-slate-400")} />
+                        <Icon
+                          size={17}
+                          className={cn(active ? "text-emerald-300" : "text-slate-400")}
+                        />
                         {collapsed && badge > 0 && (
                           <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
                         )}
                       </span>
                       {!collapsed && (
-                        <span className="min-w-0 flex-1 truncate tracking-wide">{link.label}</span>
+                        <span className="min-w-0 flex-1 truncate">{link.label}</span>
                       )}
                       {!collapsed && badge > 0 && (
-                        <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold tabular-nums text-white">
+                        <span
+                          className={cn(
+                            "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold tabular-nums",
+                            active ? "bg-indigo-500 text-white" : "bg-rose-500 text-white",
+                          )}
+                        >
                           {badge > 99 ? "99+" : badge}
                         </span>
                       )}
@@ -185,40 +195,35 @@ export function AppShell({
               })}
             </ul>
           </nav>
-
-          {/* Collapse Toggle */}
-          <button
-            onClick={toggleCollapsed}
-            className="hidden items-center justify-between border-t border-slate-100 px-4 py-3 text-xs font-semibold text-slate-400 hover:bg-slate-50 hover:text-slate-700 md:flex transition-colors"
-          >
-            {collapsed ? (
-              <ChevronsRight size={18} className="mx-auto text-slate-400" />
-            ) : (
-              <>
-                <span className="text-[11px] font-medium tracking-wide">Minimize view</span>
-                <ChevronsLeft size={16} />
-              </>
-            )}
-          </button>
-
         </aside>
       )}
 
       {/* Main Workspace Header & Content */}
       <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xs sm:px-6">
-          <div className="flex items-center gap-3">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
             {nav && nav.length > 0 && (
-              <button
-                onClick={() => setMobileOpen(true)}
-                className="flex h-11 w-11 items-center justify-center text-slate-500 hover:text-slate-800 md:hidden"
-                aria-label="Open menu"
-              >
-                <Menu size={20} />
-              </button>
+              <>
+                <button
+                  onClick={() => setMobileOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 md:hidden"
+                  aria-label="Open menu"
+                >
+                  <Menu size={18} />
+                </button>
+                <button
+                  onClick={toggleCollapsed}
+                  className="hidden h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50/50 hover:text-indigo-700 md:inline-flex"
+                  aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                >
+                  {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                </button>
+              </>
             )}
+
             {moduleLabel ? (
-              <span className="max-w-[16rem] truncate rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-700/10 sm:max-w-xs">
+              <span className="max-w-[16rem] truncate rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700 ring-1 ring-indigo-700/10 sm:max-w-xs">
                 {moduleLabel}
               </span>
             ) : null}
@@ -236,8 +241,3 @@ export function AppShell({
     </div>
   );
 }
-
-
-
-
-

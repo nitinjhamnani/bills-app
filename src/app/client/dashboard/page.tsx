@@ -215,7 +215,7 @@ function CorporateDashboard() {
                   : "A Client Admin requests a top-up when more funds are needed."}
               </p>
             </div>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
               <Wallet size={16} />
             </span>
           </div>
@@ -251,7 +251,7 @@ function CorporateDashboard() {
                 </>
               )}
             </div>
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
               <Clock size={16} />
             </span>
           </div>
@@ -296,7 +296,7 @@ function CorporateDashboard() {
           onClick={() => router.push("/client/managed-bills")}
           className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
             <FileText size={16} />
           </span>
           <span className="min-w-0 flex-1">
@@ -312,7 +312,7 @@ function CorporateDashboard() {
           onClick={() => router.push("/client/support")}
           className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
             <MessageCircle size={16} />
           </span>
           <span className="min-w-0 flex-1">

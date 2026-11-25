@@ -72,6 +72,47 @@ body {
               radial-gradient(circle at 100% 100%, rgba(5, 150, 105, 0.05) 0%, transparent 50%);
 }
 
+/* ThinkWalnut-inspired editorial bands & cards in Paytrix Royal Indigo palette */
+.tw-header-wash {
+  background: linear-gradient(90deg, #e0e7ff 0%, #eef2ff 36%, #f8fafc 74%, #ecfdf5 100%);
+}
+
+.tw-footer-wash {
+  background: linear-gradient(90deg, #dde5ff 0%, #eef2ff 42%, #f5f3ff 76%, #ecfdf5 100%);
+}
+
+.tw-band-indigo {
+  background: linear-gradient(95deg, #dce4ff 0%, #eef2ff 52%, #f8fafc 100%);
+}
+
+.tw-band-soft {
+  background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 52%, #f5f3ff 100%);
+}
+
+.tw-card-indigo {
+  background: linear-gradient(145deg, #e0e7ff 0%, #eef2ff 55%, #f8fafc 100%);
+  box-shadow: 0 14px 34px -12px rgba(30, 27, 75, 0.12);
+}
+
+.tw-card-lavender {
+  background: linear-gradient(145deg, #ede9fe 0%, #f5f3ff 58%, #ffffff 100%);
+  box-shadow: 0 14px 34px -12px rgba(30, 27, 75, 0.1);
+}
+
+.tw-card-slate {
+  background: linear-gradient(145deg, #e2e8f0 0%, #f1f5f9 55%, #ffffff 100%);
+  box-shadow: 0 14px 34px -12px rgba(15, 23, 42, 0.09);
+}
+
+.tw-card-emerald {
+  background: linear-gradient(145deg, #d1fae5 0%, #ecfdf5 58%, #f8fafc 100%);
+  box-shadow: 0 14px 34px -12px rgba(5, 150, 105, 0.11);
+}
+
+.tw-pill-row {
+  background: linear-gradient(90deg, #e0e7ff 0%, #eef2ff 60%, #f8fafc 100%);
+}
+
 * {
   scrollbar-width: thin;
   scrollbar-color: #94a3b8 transparent;

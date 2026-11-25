@@ -203,7 +203,7 @@ export default function VendorDashboardPage() {
           onClick={() => router.push("/vendor/assigned-bills")}
           className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
             <Send size={16} />
           </span>
           <span className="min-w-0 flex-1">
@@ -219,7 +219,7 @@ export default function VendorDashboardPage() {
           onClick={() => router.push("/vendor/transactions")}
           className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
             <ArrowLeftRight size={16} />
           </span>
           <span className="min-w-0 flex-1">
@@ -235,7 +235,7 @@ export default function VendorDashboardPage() {
           onClick={() => router.push("/vendor/support")}
           className="flex min-h-20 items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-xs transition-colors hover:border-indigo-200 hover:bg-indigo-50/40"
         >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white">
             <MessageCircle size={16} />
           </span>
           <span className="min-w-0 flex-1">

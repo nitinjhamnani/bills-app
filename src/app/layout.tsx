@@ -20,28 +20,28 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Paytrix | B2B Utility Bill Payments for Companies in India",
+    default: "Paytrix | Corporate Expense & Spend Management Platform",
     template: "%s | Paytrix",
   },
   description: SITE_DESCRIPTION,
   applicationName: "Paytrix",
   keywords: [
     "Paytrix",
-    "B2B bill payments",
-    "utility bill payments India",
-    "corporate utility payments",
-    "electricity bill payment for companies",
+    "corporate expense management",
+    "enterprise spend management India",
+    "multi-branch budget control",
+    "corporate treasury wallet",
   ],
   openGraph: {
     type: "website",
     locale: "en_IN",
     siteName: "Paytrix",
-    title: "Paytrix | B2B Utility Bill Payments for Companies in India",
+    title: "Paytrix | Corporate Expense & Spend Management Platform",
     description: SITE_DESCRIPTION,
   },
   twitter: {
     card: "summary",
-    title: "Paytrix | B2B Utility Bill Payments for Companies in India",
+    title: "Paytrix | Corporate Expense & Spend Management Platform",
     description: SITE_DESCRIPTION,
   },
   appleWebApp: {

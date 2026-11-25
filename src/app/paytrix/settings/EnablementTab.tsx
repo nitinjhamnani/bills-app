@@ -13,23 +13,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 
-const SUB_TABS = [
-  { key: "Electricity", label: "Electricity" },
-  { key: "Mobile Postpaid", label: "Mobile Postpaid" },
-  { key: "LPG Gas", label: "LPG Gas" },
-  { key: "Water", label: "Water" },
-  { key: "Insurance", label: "Insurance" },
-  { key: "Loan Repayment", label: "Loan Repayment" },
-  { key: "Credit Card", label: "Credit Card" },
-  { key: "Broadband Postpaid", label: "Broadband Postpaid" },
-  { key: "Landline Postpaid", label: "Landline Postpaid" },
-  { key: "Municipal Taxes", label: "Municipal Taxes" },
-  { key: "Fastag", label: "FASTag" },
+const FILTERS = [
+  { key: "ALL", label: "All" },
+  { key: "ON", label: "On" },
+  { key: "OFF", label: "Off" },
 ] as const;
 
-type SubTabKey = (typeof SUB_TABS)[number]["key"];
+type Filter = (typeof FILTERS)[number]["key"];
 
-type OperatorRow = {
+type Row = {
   id: string;
   name: string;
   detail: string;
@@ -50,31 +42,29 @@ function initials(name: string) {
 
 export function EnablementTab({ onCount }: { onCount?: (count: number) => void }) {
   const toast = useToast();
-  const currentRole = getUser()?.role;
-  const canEdit = currentRole === "SUPER_ADMIN" || currentRole === "ORGANISATION_ADMIN";
-  const [subTab, setSubTab] = useState<SubTabKey>("Electricity");
-  const [rows, setRows] = useState<OperatorRow[]>([]);
+  const canEdit = getUser()?.role === "ORGANISATION_ADMIN";
+  const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>("ALL");
   const [search, setSearch] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  async function load(categoryKey: SubTabKey) {
+  const endpoint = "/api/v1/paytrix/categories";
+
+  async function load() {
     setLoading(true);
-    setRows([]);
     try {
-      const data = await apiFetch<Array<Record<string, unknown>>>(
-        `/api/v1/paytrix/categories/${encodeURIComponent(categoryKey)}/operators`,
-      );
+      const data = await apiFetch<Array<Record<string, unknown>>>(endpoint);
       const next = data.map((item) => ({
-        id: String(item.operatorId ?? ""),
+        id: String(item.categoryId),
         name: String(item.name ?? ""),
-        detail: String(item.operatorId ?? ""),
+        detail: String(item.categoryId ?? ""),
         enabled: Boolean(item.enabled),
       }));
       setRows(next);
       onCount?.(next.length);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Failed to load operators");
+      toast.error(err instanceof ApiError ? err.message : "Failed to load categories");
     } finally {
       setLoading(false);
     }
@@ -82,21 +72,17 @@ export function EnablementTab({ onCount }: { onCount?: (count: number) => void }
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load(subTab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subTab]);
+    load();
+  }, []);
 
-  async function toggle(row: OperatorRow, enabled: boolean) {
+  async function toggle(row: Row, enabled: boolean) {
     setPendingId(row.id);
     setRows((current) => current.map((item) => (item.id === row.id ? { ...item, enabled } : item)));
     try {
-      await apiFetch(
-        `/api/v1/paytrix/categories/${encodeURIComponent(subTab)}/operators/${encodeURIComponent(row.id)}`,
-        {
-          method: "PUT",
-          body: { enabled },
-        },
-      );
+      await apiFetch(`${endpoint}/${encodeURIComponent(row.id)}`, {
+        method: "PUT",
+        body: { enabled },
+      });
       toast.success(`${row.name} ${enabled ? "enabled" : "disabled"}`);
     } catch (err) {
       setRows((current) => current.map((item) => (item.id === row.id ? { ...item, enabled: row.enabled } : item)));
@@ -106,42 +92,49 @@ export function EnablementTab({ onCount }: { onCount?: (count: number) => void }
     }
   }
 
-  const visible = useMemo(() => {
+  const searched = useMemo(() => {
     const query = search.trim().toLowerCase();
     if (!query) return rows;
     return rows.filter(
-      (row) =>
-        row.name.toLowerCase().includes(query) ||
-        row.detail.toLowerCase().includes(query) ||
-        row.id.toLowerCase().includes(query),
+      (row) => row.name.toLowerCase().includes(query) || row.detail.toLowerCase().includes(query) || row.id.toLowerCase().includes(query),
     );
   }, [rows, search]);
+
+  const counts = {
+    ALL: searched.length,
+    ON: searched.filter((row) => row.enabled).length,
+    OFF: searched.filter((row) => !row.enabled).length,
+  };
+  const visible = searched.filter((row) => {
+    if (filter === "ON") return row.enabled;
+    if (filter === "OFF") return !row.enabled;
+    return true;
+  });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex shrink-0 gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1">
-        {SUB_TABS.map((item) => {
-          const active = subTab === item.key;
+        {FILTERS.map((item) => {
+          const active = filter === item.key;
           return (
             <button
               key={item.key}
               type="button"
-              onClick={() => {
-                if (item.key === subTab) return;
-                setSearch("");
-                setSubTab(item.key);
-              }}
+              onClick={() => setFilter(item.key)}
               className={cn(
                 "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
                 active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
               )}
             >
               {item.label}
-              {active && !loading && (
-                <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
-                  {visible.length}
-                </span>
-              )}
+              <span
+                className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
+                )}
+              >
+                {counts[item.key]}
+              </span>
             </button>
           );
         })}
@@ -158,7 +151,7 @@ export function EnablementTab({ onCount }: { onCount?: (count: number) => void }
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search operator"
+              placeholder="Search category"
               className={searchClass}
             />
           </div>
@@ -172,22 +165,22 @@ export function EnablementTab({ onCount }: { onCount?: (count: number) => void }
         ) : visible.length === 0 ? (
           <EmptyState
             icon={Receipt}
-            title={rows.length === 0 ? "No operators" : "No operators match"}
+            title={rows.length === 0 ? "No categories" : "No categories match"}
             description={
               rows.length === 0
-                ? "The operators list has not synced yet."
-                : "Try another search."
+                ? "The categories list has not synced yet."
+                : "Try another status or clear the search."
             }
           />
         ) : (
           <Table>
-            <THead columns={["Operator", "Status", "Enabled"]} />
+            <THead columns={["Category", "Status", "Enabled"]} />
             <TBody>
               {visible.map((row) => (
                 <TR key={row.id}>
                   <TD>
                     <div className="flex items-center gap-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
                         {initials(row.name)}
                       </span>
                       <div className="min-w-0">
