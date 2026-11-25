@@ -7,8 +7,21 @@ import { Modal } from "@/components/ui/Modal";
 import { Field, SearchableSelect } from "@/components/ui/Field";
 import { useToast } from "@/components/ui/Toast";
 
-const DEFAULT_CATEGORY_ID = "Electricity";
+const OFFERED_CATEGORIES = [
+  "Electricity",
+  "Mobile Postpaid",
+  "LPG Gas",
+  "Water",
+  "Insurance",
+  "Loan Repayment",
+  "Credit Card",
+  "Broadband Postpaid",
+  "Landline Postpaid",
+  "Municipal Taxes",
+  "Fastag",
+] as const;
 
+type CategoryOption = { categoryId: string; name: string };
 type Biller = { billerId: string; name: string; categoryId: string };
 type BillerList = { billers: Biller[]; searchRequired: boolean };
 type Parameter = {
@@ -43,7 +56,10 @@ export function CreateBillModal({
   fixedBranchId?: string;
 }) {
   const toast = useToast();
-  const categoryId = DEFAULT_CATEGORY_ID;
+
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoryId, setCategoryId] = useState("");
 
   const [billers, setBillers] = useState<Biller[]>([]);
   const [billersLoading, setBillersLoading] = useState(false);
@@ -63,6 +79,8 @@ export function CreateBillModal({
 
   useEffect(() => {
     if (!open) return;
+    setCategories([]);
+    setCategoryId("");
     setBillers([]);
     setSearchRequired(false);
     setBillerId("");
@@ -73,6 +91,39 @@ export function CreateBillModal({
     setMobileNumber("");
     setBranchId(fixedBranchId ?? "");
 
+    let cancelled = false;
+    setCategoriesLoading(true);
+    apiFetch<Array<{ categoryId: string; name: string }>>(
+      `/api/v1/client/bbps/categories?clientId=${encodeURIComponent(clientId)}`,
+    )
+      .then((rows) => {
+        if (cancelled) return;
+        const offered = new Set<string>(OFFERED_CATEGORIES);
+        const options = rows
+          .filter((row) => offered.has(row.categoryId) || offered.has(row.name))
+          .map((row) => ({ categoryId: row.categoryId, name: row.name || row.categoryId }));
+        setCategories(options);
+        const electricity = options.find(
+          (item) => item.categoryId === "Electricity" || item.name === "Electricity",
+        );
+        setCategoryId(electricity?.categoryId ?? options[0]?.categoryId ?? "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setCategories([]);
+        setCategoryId("");
+        toast.error(err instanceof ApiError ? err.message : "Failed to load categories");
+      })
+      .finally(() => {
+        if (!cancelled) setCategoriesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, clientId, fixedBranchId, toast]);
+
+  useEffect(() => {
+    if (!open || !categoryId) return;
     const seq = ++requestSeq.current;
     let cancelled = false;
     setBillersLoading(true);
@@ -96,7 +147,7 @@ export function CreateBillModal({
     return () => {
       cancelled = true;
     };
-  }, [open, categoryId, clientId, fixedBranchId, toast]);
+  }, [open, categoryId, clientId, toast]);
 
   useEffect(() => {
     if (!open || !categoryId || !searchRequired) return;
@@ -136,6 +187,18 @@ export function CreateBillModal({
     parameters.length > 0 &&
     parameters.every((parameter) => (values[parameter.name] ?? "").trim().length > 0) &&
     /^[6-9][0-9]{9}$/.test(mobileNumber);
+
+  function chooseCategory(nextId: string) {
+    if (nextId === categoryId) return;
+    setCategoryId(nextId);
+    setBillerId("");
+    setBillerQuery("");
+    setBillers([]);
+    setSearchRequired(false);
+    setParameters([]);
+    setParameterError(null);
+    setValues({});
+  }
 
   async function chooseBiller(nextId: string) {
     setBillerId(nextId);
@@ -187,8 +250,8 @@ export function CreateBillModal({
       title="Create a managed bill"
       description={
         needsBranch
-          ? "Select the branch and electricity operator, then fill in the fields it asks for and the mobile number sent with the fetch."
-          : "Select the electricity operator, then fill in the fields it asks for and the mobile number sent with the fetch."
+          ? "Select the branch, category, and operator, then fill in the fields it asks for and the mobile number sent with the fetch."
+          : "Select the category and operator, then fill in the fields it asks for and the mobile number sent with the fetch."
       }
       footer={
         <>
@@ -230,24 +293,41 @@ export function CreateBillModal({
         )}
 
         <SearchableSelect
+          label="Category"
+          value={categoryId}
+          onChange={chooseCategory}
+          loading={categoriesLoading}
+          placeholder={categoriesLoading ? "Loading categories..." : "Select a category..."}
+          searchPlaceholder="Search categories..."
+          emptyMessage="No bill categories are available."
+          options={categories.map((category) => ({
+            value: category.categoryId,
+            label: category.name,
+          }))}
+        />
+
+        <SearchableSelect
           label="Operator"
           value={billerId}
           onChange={chooseBiller}
           loading={billersLoading}
+          disabled={!categoryId}
           placeholder={
-            billersLoading && billers.length === 0
-              ? "Loading electricity operators..."
-              : "Select an electricity operator..."
+            !categoryId
+              ? "Select a category first..."
+              : billersLoading && billers.length === 0
+                ? "Loading operators..."
+                : "Select an operator..."
           }
           searchPlaceholder={
             searchRequired
               ? "Type at least 2 characters to search operators..."
-              : "Search electricity operators..."
+              : "Search operators..."
           }
           emptyMessage={
             searchRequired && billerQuery.trim().length < 2
               ? "Type at least 2 characters to search operators."
-              : "No electricity operators match your search."
+              : "No operators match your search."
           }
           options={billers.map((biller) => ({
             value: biller.billerId,

@@ -40,6 +40,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   ADJUSTMENT: "Manual credit",
   FEE: "Convenience fee",
   ELECTRICITY: "Electricity",
+  MOBILE_POSTPAID: "Mobile Postpaid",
+  LPG_GAS: "LPG Gas",
+  WATER: "Water",
+  INSURANCE: "Insurance",
+  LOAN_REPAYMENT: "Loan Repayment",
+  CREDIT_CARD: "Credit Card",
+  BROADBAND_POSTPAID: "Broadband Postpaid",
+  LANDLINE_POSTPAID: "Landline Postpaid",
+  MUNICIPAL_TAXES: "Municipal Taxes",
+  FASTAG: "FASTag",
 };
 
 const MODE_LABELS: Record<string, string> = {

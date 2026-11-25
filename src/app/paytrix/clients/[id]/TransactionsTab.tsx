@@ -26,6 +26,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   ADJUSTMENT: "Manual credit",
   FEE: "Convenience fee",
   ELECTRICITY: "Electricity",
+  MOBILE_POSTPAID: "Mobile Postpaid",
+  LPG_GAS: "LPG Gas",
+  WATER: "Water",
+  INSURANCE: "Insurance",
+  LOAN_REPAYMENT: "Loan Repayment",
+  CREDIT_CARD: "Credit Card",
+  BROADBAND_POSTPAID: "Broadband Postpaid",
+  LANDLINE_POSTPAID: "Landline Postpaid",
+  MUNICIPAL_TAXES: "Municipal Taxes",
+  FASTAG: "FASTag",
 };
 
 function categoryLabel(category: string) {
@@ -255,7 +265,22 @@ export function TransactionsTab({ clientId }: { clientId: string }) {
   }
 
   const categories = useMemo(() => {
-    const set = new Set<string>(["RECHARGE", "ADJUSTMENT", "FEE", "ELECTRICITY"]);
+    const set = new Set<string>([
+      "RECHARGE",
+      "ADJUSTMENT",
+      "FEE",
+      "ELECTRICITY",
+      "MOBILE_POSTPAID",
+      "LPG_GAS",
+      "WATER",
+      "INSURANCE",
+      "LOAN_REPAYMENT",
+      "CREDIT_CARD",
+      "BROADBAND_POSTPAID",
+      "LANDLINE_POSTPAID",
+      "MUNICIPAL_TAXES",
+      "FASTAG",
+    ]);
     for (const entry of entries) {
       if (entry.category) set.add(entry.category);
     }

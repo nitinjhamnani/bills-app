@@ -11,7 +11,19 @@ import { formatRange, type Commission, type CommissionRange } from "./format";
 
 interface Named { id: string; name: string }
 
-const DEFAULT_CATEGORY_ID = "Electricity";
+const CATEGORY_OPTIONS = [
+  { id: "Electricity", name: "Electricity" },
+  { id: "Mobile Postpaid", name: "Mobile Postpaid" },
+  { id: "LPG Gas", name: "LPG Gas" },
+  { id: "Water", name: "Water" },
+  { id: "Insurance", name: "Insurance" },
+  { id: "Loan Repayment", name: "Loan Repayment" },
+  { id: "Credit Card", name: "Credit Card" },
+  { id: "Broadband Postpaid", name: "Broadband Postpaid" },
+  { id: "Landline Postpaid", name: "Landline Postpaid" },
+  { id: "Municipal Taxes", name: "Municipal Taxes" },
+  { id: "Fastag", name: "FASTag" },
+] as const;
 
 /** Adds an approved commission, or edits the range and rate of one. */
 export function CommissionForm({
@@ -26,7 +38,9 @@ export function CommissionForm({
   const toast = useToast();
   const [ranges, setRanges] = useState<CommissionRange[]>([]);
   const [operators, setOperators] = useState<Named[]>([]);
+  const [operatorsLoading, setOperatorsLoading] = useState(false);
   const [vendors, setVendors] = useState<Client[]>([]);
+  const [categoryId, setCategoryId] = useState<string>(CATEGORY_OPTIONS[0].id);
   const [operatorIds, setOperatorIds] = useState<string[]>([]);
   const [vendorId, setVendorId] = useState(editing?.vendorId ?? defaultVendorId ?? "");
   const [rangeId, setRangeId] = useState("");
@@ -38,26 +52,44 @@ export function CommissionForm({
     apiFetch<CommissionRange[]>("/api/v1/paytrix/commissions/ranges")
       .then((rows) => setRanges(rows.filter((range) => range.isActive)))
       .catch(() => setRanges([]));
-    if (editing) return;
-    apiFetch<Array<{ billerId: string; name: string }>>(
-      `/api/v1/paytrix/commissions/providers?categoryId=${encodeURIComponent(DEFAULT_CATEGORY_ID)}`,
-    )
-      .then((rows) => setOperators(rows.map((row) => ({ id: row.billerId, name: row.name || row.billerId }))))
-      .catch(() => setOperators([]));
-    if (!defaultVendorId) {
-      apiFetch<Client[]>("/api/v1/paytrix/clients")
-        .then((rows) =>
-          setVendors(
-            rows.filter(
-              (row) =>
-                row.clientType === "VENDOR" &&
-                (row.status === "ACTIVE" || row.status === "PENDING"),
-            ),
+    if (editing || defaultVendorId) return;
+    apiFetch<Client[]>("/api/v1/paytrix/clients")
+      .then((rows) =>
+        setVendors(
+          rows.filter(
+            (row) =>
+              row.clientType === "VENDOR" &&
+              (row.status === "ACTIVE" || row.status === "PENDING"),
           ),
-        )
-        .catch(() => setVendors([]));
-    }
+        ),
+      )
+      .catch(() => setVendors([]));
   }, [editing, defaultVendorId]);
+
+  useEffect(() => {
+    if (editing) return;
+    let cancelled = false;
+    setOperators([]);
+    setOperatorsLoading(true);
+    apiFetch<Array<{ billerId: string; name: string }>>(
+      `/api/v1/paytrix/commissions/providers?categoryId=${encodeURIComponent(categoryId)}`,
+    )
+      .then((rows) => {
+        if (cancelled) return;
+        setOperators(rows.map((row) => ({ id: row.billerId, name: row.name || row.billerId })));
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setOperators([]);
+        toast.error(err instanceof ApiError ? err.message : "Failed to load operators");
+      })
+      .finally(() => {
+        if (!cancelled) setOperatorsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [editing, categoryId, toast]);
 
   useEffect(() => {
     if (!editing || rangeId || ranges.length === 0) return;
@@ -84,7 +116,7 @@ export function CommissionForm({
       }
       const result = await apiFetch<CreateOutcome>("/api/v1/paytrix/commissions", {
         method: "POST",
-        body: { ...body, categoryId: DEFAULT_CATEGORY_ID, operatorIds, vendorId },
+        body: { ...body, categoryId, operatorIds, vendorId },
       });
       if (result.skipped.length === 0) {
         toast.success(result.created.length === 1 ? "Vendor rule saved" : `${result.created.length} vendor rules saved`);
@@ -132,6 +164,22 @@ export function CommissionForm({
         ) : (
           <>
             <SearchableSelect
+              label="Category"
+              value={categoryId}
+              onChange={(next) => {
+                if (next === categoryId) return;
+                setCategoryId(next);
+                setOperatorIds([]);
+                setOutcome(null);
+              }}
+              placeholder="Select a category..."
+              searchPlaceholder="Search categories..."
+              options={CATEGORY_OPTIONS.map((item) => ({
+                value: item.id,
+                label: item.name,
+              }))}
+            />
+            <SearchableSelect
               label="Operators"
               multiple
               value=""
@@ -141,7 +189,8 @@ export function CommissionForm({
                 setOperatorIds(next);
                 setOutcome(null);
               }}
-              placeholder="Select operators..."
+              loading={operatorsLoading}
+              placeholder={operatorsLoading ? "Loading operators..." : "Select operators..."}
               searchPlaceholder="Search operators..."
               options={operators.map((item) => ({
                 value: item.id,

@@ -13,7 +13,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Table, THead, TBody, TR, TD } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
 
-const SUB_TABS = [{ key: "Electricity", label: "Electricity" }] as const;
+const SUB_TABS = [
+  { key: "Electricity", label: "Electricity" },
+  { key: "Mobile Postpaid", label: "Mobile Postpaid" },
+  { key: "LPG Gas", label: "LPG Gas" },
+  { key: "Water", label: "Water" },
+  { key: "Insurance", label: "Insurance" },
+  { key: "Loan Repayment", label: "Loan Repayment" },
+  { key: "Credit Card", label: "Credit Card" },
+  { key: "Broadband Postpaid", label: "Broadband Postpaid" },
+  { key: "Landline Postpaid", label: "Landline Postpaid" },
+  { key: "Municipal Taxes", label: "Municipal Taxes" },
+  { key: "Fastag", label: "FASTag" },
+] as const;
 
 type SubTabKey = (typeof SUB_TABS)[number]["key"];
 
@@ -48,6 +60,7 @@ export function EnablementTab({ onCount }: { onCount?: (count: number) => void }
 
   async function load(categoryKey: SubTabKey) {
     setLoading(true);
+    setRows([]);
     try {
       const data = await apiFetch<Array<Record<string, unknown>>>(
         `/api/v1/paytrix/categories/${encodeURIComponent(categoryKey)}/operators`,
@@ -113,21 +126,22 @@ export function EnablementTab({ onCount }: { onCount?: (count: number) => void }
             <button
               key={item.key}
               type="button"
-              onClick={() => setSubTab(item.key)}
+              onClick={() => {
+                if (item.key === subTab) return;
+                setSearch("");
+                setSubTab(item.key);
+              }}
               className={cn(
                 "flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors",
                 active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
               )}
             >
               {item.label}
-              <span
-                className={cn(
-                  "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                  active ? "bg-indigo-50 text-indigo-700" : "bg-white/70 text-slate-500",
-                )}
-              >
-                {visible.length}
-              </span>
+              {active && !loading && (
+                <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                  {visible.length}
+                </span>
+              )}
             </button>
           );
         })}

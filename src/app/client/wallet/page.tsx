@@ -34,6 +34,16 @@ const MODE_LABELS: Record<PaymentMode, string> = {
 const CATEGORY_LABELS: Record<string, string> = {
   RECHARGE: "Recharge",
   ELECTRICITY: "Electricity",
+  MOBILE_POSTPAID: "Mobile Postpaid",
+  LPG_GAS: "LPG Gas",
+  WATER: "Water",
+  INSURANCE: "Insurance",
+  LOAN_REPAYMENT: "Loan Repayment",
+  CREDIT_CARD: "Credit Card",
+  BROADBAND_POSTPAID: "Broadband Postpaid",
+  LANDLINE_POSTPAID: "Landline Postpaid",
+  MUNICIPAL_TAXES: "Municipal Taxes",
+  FASTAG: "FASTag",
 };
 
 const TABS = [
