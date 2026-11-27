@@ -122,7 +122,7 @@ export function SearchableSelect({
     const rect = trigger.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
     const spaceBelow = viewportHeight - rect.bottom - 16;
-    const headerOffset = searchable ? 52 : 12;
+    const headerOffset = (searchable ? 52 : 12) + (multiple ? 40 : 0);
     const maxListHeight = Math.max(160, Math.min(280, spaceBelow - headerOffset));
     setMenuStyle({
       top: rect.bottom + 6,
@@ -130,7 +130,7 @@ export function SearchableSelect({
       width: rect.width,
       maxListHeight,
     });
-  }, [searchable]);
+  }, [multiple, searchable]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -209,6 +209,23 @@ export function SearchableSelect({
   }
 
   const selectedCount = multiple ? values.length : activeSelection ? 1 : 0;
+  const visibleIds = filteredOptions.map((opt) => opt.value);
+  const visibleSelectedCount = visibleIds.filter((id) => values.includes(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && visibleSelectedCount === visibleIds.length;
+
+  function selectAllVisible() {
+    const next = [...values];
+    for (const id of visibleIds) {
+      if (!next.includes(id)) next.push(id);
+    }
+    onValuesChange?.(next);
+  }
+
+  function deselectAllVisible() {
+    const visible = new Set(visibleIds);
+    onValuesChange?.(values.filter((id) => !visible.has(id)));
+  }
+
   const selectedSummary = useMemo(() => {
     if (!multiple) return null;
     const labels = values
@@ -287,6 +304,32 @@ export function SearchableSelect({
                     <X size={14} />
                   </button>
                 )}
+              </div>
+            )}
+
+            {multiple && filteredOptions.length > 0 && (
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-2 py-1.5">
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    disabled={allVisibleSelected}
+                    onClick={selectAllVisible}
+                    className="rounded-md px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-50 disabled:cursor-default disabled:text-slate-300 disabled:hover:bg-transparent"
+                  >
+                    Select all
+                  </button>
+                  <button
+                    type="button"
+                    disabled={visibleSelectedCount === 0}
+                    onClick={deselectAllVisible}
+                    className="rounded-md px-2 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-100 disabled:cursor-default disabled:text-slate-300 disabled:hover:bg-transparent"
+                  >
+                    Deselect all
+                  </button>
+                </div>
+                <span className="shrink-0 pr-1.5 text-[11px] font-medium tabular-nums text-slate-400">
+                  {visibleSelectedCount} of {filteredOptions.length}
+                </span>
               </div>
             )}
 

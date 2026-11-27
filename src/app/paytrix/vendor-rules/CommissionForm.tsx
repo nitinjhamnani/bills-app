@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Check } from "lucide-react";
 import { apiFetch, ApiError } from "@/lib/api-client";
 import { Button } from "@/components/ui/Button";
 import { Field, SearchableSelect, SelectField } from "@/components/ui/Field";
@@ -46,7 +47,7 @@ export function CommissionForm({
   const [rangeId, setRangeId] = useState("");
   const [commission, setCommission] = useState(editing ? String(editing.commission) : "");
   const [saving, setSaving] = useState(false);
-  const [outcome, setOutcome] = useState<CreateOutcome | null>(null);
+  const [issues, setIssues] = useState<RuleIssues | null>(null);
 
   useEffect(() => {
     apiFetch<CommissionRange[]>("/api/v1/paytrix/commissions/ranges")
@@ -123,7 +124,11 @@ export function CommissionForm({
         onClose(true);
         return;
       }
-      setOutcome(result);
+      setIssues({
+        attempted: result.created.length + result.skipped.length,
+        created: result.created.length,
+        skipped: result.skipped,
+      });
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not save this commission");
     } finally {
@@ -133,10 +138,17 @@ export function CommissionForm({
 
   const ready = (editing || (operatorIds.length > 0 && vendorId)) && rangeId !== "" && commission.trim() !== "";
 
+  function acknowledgeIssues() {
+    const createdAny = (issues?.created ?? 0) > 0;
+    setIssues(null);
+    if (createdAny) onClose(true);
+  }
+
   return (
+    <>
     <Modal
       open
-      onClose={saving ? () => undefined : () => onClose(Boolean(outcome && outcome.created.length > 0))}
+      onClose={saving || issues ? () => undefined : () => onClose(false)}
       size="md"
       title={editing ? "Edit commission" : "Add vendor rule"}
       description={editing
@@ -144,10 +156,10 @@ export function CommissionForm({
         : "Each selected operator becomes its own approved rule at this percent and range."}
       footer={
         <>
-          <Button variant="outline" onClick={() => onClose(Boolean(outcome && outcome.created.length > 0))} disabled={saving}>
-            {outcome && outcome.created.length > 0 ? "Close" : "Cancel"}
+          <Button variant="outline" onClick={() => onClose(false)} disabled={saving || issues !== null}>
+            Cancel
           </Button>
-          <Button form="commission-form" type="submit" loading={saving} disabled={!ready}>{editing ? "Save changes" : "Save"}</Button>
+          <Button form="commission-form" type="submit" loading={saving} disabled={!ready || issues !== null}>{editing ? "Save changes" : "Save"}</Button>
         </>
       }
     >
@@ -170,7 +182,7 @@ export function CommissionForm({
                 if (next === categoryId) return;
                 setCategoryId(next);
                 setOperatorIds([]);
-                setOutcome(null);
+                setIssues(null);
               }}
               placeholder="Select a category..."
               searchPlaceholder="Search categories..."
@@ -187,7 +199,7 @@ export function CommissionForm({
               values={operatorIds}
               onValuesChange={(next) => {
                 setOperatorIds(next);
-                setOutcome(null);
+                setIssues(null);
               }}
               loading={operatorsLoading}
               placeholder={operatorsLoading ? "Loading operators..." : "Select operators..."}
@@ -197,7 +209,6 @@ export function CommissionForm({
                 label: item.name,
               }))}
             />
-            {outcome && <CreateOutcomeList outcome={outcome} />}
             {!defaultVendorId && (
               <SearchableSelect
                 label="Vendor"
@@ -232,6 +243,13 @@ export function CommissionForm({
         />
       </form>
     </Modal>
+    {issues && (
+      <InvalidRulesModal
+        issues={issues}
+        onOk={acknowledgeIssues}
+      />
+    )}
+    </>
   );
 }
 
@@ -240,20 +258,48 @@ interface CreateOutcome {
   skipped: { operatorId: string; operatorName: string; message: string }[];
 }
 
-function CreateOutcomeList({ outcome }: { outcome: CreateOutcome }) {
+interface RuleIssues {
+  attempted: number;
+  created: number;
+  skipped: CreateOutcome["skipped"];
+}
+
+function InvalidRulesModal({ issues, onOk }: { issues: RuleIssues; onOk: () => void }) {
+  const invalid = issues.skipped.length;
+  const countLabel = `${invalid} of ${issues.attempted} ${issues.attempted === 1 ? "rule" : "rules"} ${invalid === 1 ? "was" : "were"} invalid`;
+  const createdLabel = issues.created === 0
+    ? "No rules were created."
+    : issues.created === 1
+      ? "1 rule was created."
+      : `${issues.created} rules were created.`;
+
   return (
-    <div className="flex flex-col gap-2">
-      {outcome.created.length > 0 && (
-        <p className="text-xs font-medium text-slate-700">
-          Saved {outcome.created.map((rule) => rule.operatorName).join(", ")}.
-        </p>
-      )}
-      {outcome.skipped.map((item) => (
-        <p key={item.operatorId} className="text-xs font-medium text-rose-700">
-          {item.operatorName}: {item.message}
-        </p>
-      ))}
-    </div>
+    <Modal
+      open
+      raised
+      size="xl"
+      onClose={onOk}
+      title={issues.created === 0 ? "Rules were not created" : "Some rules were not created"}
+      description={issues.created === 0
+        ? "Each row is a rule that failed validation."
+        : "The valid rules are already saved. Each row is a rule that failed validation."}
+      footer={
+        <Button icon={<Check size={15} />} onClick={onOk}>OK</Button>
+      }
+    >
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+        <p className="text-sm font-semibold text-indigo-950">{countLabel}</p>
+        <p className="mt-0.5 text-xs text-indigo-800/80">{createdLabel}</p>
+      </div>
+      <ul className="mt-3 max-h-80 overflow-y-auto rounded-xl border border-slate-200">
+        {issues.skipped.map((item) => (
+          <li key={item.operatorId} className="border-b border-slate-100 px-4 py-3 last:border-b-0">
+            <p className="text-sm font-semibold text-slate-900">{item.operatorName}</p>
+            <p className="mt-1 text-xs font-medium leading-5 text-rose-700">{item.message}</p>
+          </li>
+        ))}
+      </ul>
+    </Modal>
   );
 }
 
